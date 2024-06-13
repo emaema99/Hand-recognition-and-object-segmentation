@@ -363,7 +363,7 @@ class CustomPipeline:
 
 	def getNeuralNetwork(self):
 		#Define Script Folder Path and Get Blob files from Trained Neural Network
-		SCRIPT_DIR = "/home/ema/Desktop/depthai_marco_scripts"
+		SCRIPT_DIR = "/home/ema/Desktop/depthai-hand-segmentation"
 
 		PALM_DETECTION_MODEL = str(SCRIPT_DIR + "/models/palm_detection_sh4.blob")
 		if not Path(PALM_DETECTION_MODEL).exists():
@@ -383,7 +383,7 @@ class CustomPipeline:
 		else:
 			print(f"> Post Processing Palm Detection blob: {DETECTION_POSTPROCESSING_MODEL}")
 
-		TEMPLATE_MANAGER_SCRIPT_SOLO = str(SCRIPT_DIR + "/Pipeline/template_manager_script_solo.py")
+		TEMPLATE_MANAGER_SCRIPT_SOLO = str(SCRIPT_DIR + "/template_manager_script_solo.py")
 		if not Path(TEMPLATE_MANAGER_SCRIPT_SOLO).exists():
 			raise FileNotFoundError(f'Required template_manager_script_solo.py file/s not found!')
 		else:

@@ -17,7 +17,7 @@ Code for running YOLOV8-seg models on Jetson Nano 4GB and gesture recognition (h
 Based on https://github.com/tirandazi/depthai-yolov8-segment and https://github.com/geaxgx/depthai_hand_tracker.
 '''
 
-path_to_yolo = "/home/ema/Desktop/depthai_marco_scripts/models/best_nano8.pt"
+path_to_yolo = "/home/ema/Desktop/depthai-hand-segmentation/models/best_nano8.pt"
 num_elements_moving_avarage = 15
 hand_obj_dist_threshold = 250 #[mm]
 down_sampling = 5

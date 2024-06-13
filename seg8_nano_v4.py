@@ -2,7 +2,6 @@
 
 import copy
 import threading
-import json
 import time
 import cv2
 import depthai as dai
@@ -13,7 +12,7 @@ from ultralytics import YOLO
 
 '''
 Class for running YOLOV8-seg models efficiently (15 fps max on Jetson Nano 4GB).
-Based on this repository https://github.com/tirandazi/depthai-yolov8-segment and the works of Ultralytics https://docs.ultralytics.com/tasks/segment/.
+Based on the works of Ultralytics https://docs.ultralytics.com/tasks/segment/.
 '''
 
 # Set the current CUDA device using the index number of the GPU

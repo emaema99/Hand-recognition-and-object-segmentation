@@ -6,8 +6,6 @@
 
 import socket
 import struct
-import time
-import math
 
 class ArduinoCommunicator:
     def __init__(self, ip='192.168.0.21', port=50000, buffer_size=1):
