@@ -13,8 +13,8 @@ from seg8_hand_utils import HostSpatialsCalc
 from arduino_wifi_communication import ArduinoCommunicator
 
 '''
-Code for running YOLOV8-seg models on Jetson Nano 4GB and gesture recognition (hand tracking) on OAK devices.
-Based on https://github.com/tirandazi/depthai-yolov8-segment and https://github.com/geaxgx/depthai_hand_tracker.
+Code for running YOLOV8 segmentation models on Jetson Nano 4GB and gesture recognition (hand tracking) on OAK devices.
+Based on https://github.com/geaxgx/depthai_hand_tracker and on the works of Ultralytics https://docs.ultralytics.com/tasks/segment/.
 '''
 
 path_to_yolo = "/home/ema/Desktop/depthai-hand-segmentation/models/best_nano8.pt"

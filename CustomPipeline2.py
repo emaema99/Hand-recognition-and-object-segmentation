@@ -7,8 +7,6 @@ import sys
 import re
 
 from pathlib import Path
-from collections import namedtuple
-from numpy.lib.arraysetops import isin
 from string import Template
 
 
@@ -198,12 +196,12 @@ class CustomPipeline:
 		# Properties
 		left.setBoardSocket(dai.CameraBoardSocket.CAM_B)
 		left.setCamera("left")
-		left.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
+		left.setResolution(dai.MonoCameraProperties.SensorResolution.THE_480_P)
 		left.setFps(self.internal_fps)
 
 		right.setBoardSocket(dai.CameraBoardSocket.CAM_C)
 		right.setCamera("right")
-		right.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
+		right.setResolution(dai.MonoCameraProperties.SensorResolution.THE_480_P)
 		right.setFps(self.internal_fps)
 
 		stereo.setDefaultProfilePreset(dai.node.StereoDepth.PresetMode.HIGH_DENSITY)

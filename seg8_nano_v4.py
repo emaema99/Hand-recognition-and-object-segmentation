@@ -4,7 +4,6 @@ import copy
 import threading
 import time
 import cv2
-import depthai as dai
 import numpy as np
 import torch
 
