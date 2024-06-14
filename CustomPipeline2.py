@@ -9,49 +9,47 @@ import re
 from pathlib import Path
 from string import Template
 
-
 class CustomPipeline:
 	"""
     Custom Pipeline for executing Mediapipe (https://pypi.org/project/mediapipe/) for hand spatial tracking.
     This class derive from a public github repository (https://github.com/geaxgx/depthai_hand_tracker).
     The default parameter of this class is to detect one hand per frame.
     We assume to use the OAK-D Lite camera, hence that the depth information is available as default.
-    
-    >>ARGUMENTS:
-    - pd_score: 			confidence score to determine whether a detection is reliable (a float between 0 and 1).
-    - pd_nms_thresh: 		NMS threshold. 
-    - lm_score_thresh : 	confidence score to determine whether landmarks prediction is reliable (a float between 0 and 1).
-    - use_world_landmarks: 	boolean. The landmarks model yields 2 types of 3D coordinates : 
-                    		- coordinates expressed in pixels in the image, always stored in hand.landmarks,
-                    		- coordinates expressed in meters in the world, stored in hand.world_landmarks.
-    - xyz : 				boolean, when True calculate the (x, y, z) coords of the detected palms.
-    - crop : 				boolean which indicates if square cropping on source images is applied or not
-    						Default Set to True for matching the square imagesize input of Yolo
-    - internal_fps : 		when using the internal color camera as input source, set its FPS to this value (calling setFps()).
-    - resolution : 			sensor resolution "full" (1920x1080) or "ultra" (3840x2160),
-    - internal_frame_height : when using the internal color camera, set the frame height (calling setIspScale()).
-                    		The width is calculated accordingly to height and depends on value of 'crop'.
-    - use_gesture : 		boolean, when True, recognize hand poses froma predefined set of poses
-                    		(ONE, TWO, THREE, FOUR, FIVE, OK, PEACE, FIST)
-    - use_handedness_average : boolean, when True the handedness is the average of the last collected handednesses.
-							This brings robustness since the inferred robustness is not reliable on ambiguous hand poses.
-							When False, handedness is the last inferred handedness.
-    - single_hand_tolerance_thresh (Duo mode only) : In Duo mode, if there is only one hand in a frame, 
-							in order to know when a second hand will appear you need to run the palm detection 
-							in the following frames. Because palm detection is slow, you may want to delay 
-							the next time you will run it. 'single_hand_tolerance_thresh' is the number of 
-							frames during only one hand is detected before palm detection is run again.   
-    - lm_nb_threads : 		1 or 2 (default=2), number of inference threads for the landmark model
-    - use_same_image (Edge Duo mode only) : boolean, when True, use the same image when inferring the landmarks of the 2 hands
-							(setReusePreviousImage(True) in the ImageManip node before the landmark model). 
-							When True, the FPS is significantly higher but the skeleton may appear shifted on one of the 2 hands.
-    - stats : 				boolean, when True, display some statistics when exiting.   
-    - trace : 				int, 0 = no trace, otherwise print some debug messages or show output of ImageManip nodes
-							if trace & 1, print application level info like number of palm detections,
-							if trace & 2, print lower level info like when a message is sent or received by the manager script node,
-							if trace & 4, show in cv2 windows outputs of ImageManip node,
-							if trace & 8, save in file tmp_code.py the python code of the manager script node
-							Ex: if trace==3, both application and low level info are displayed.
+
+    >> ARGUMENTS:
+
+    - pd_score: 					confidence score to determine whether a detection is reliable (a float between 0 and 1).
+    - pd_nms_thresh: 				NMS threshold. 
+    - lm_score_thresh: 				confidence score to determine whether landmarks prediction is reliable (a float between 0 and 1).
+    - use_world_landmarks: 			boolean. The landmarks model yields 2 types of 3D coordinates : 
+									- coordinates expressed in pixels in the image, always stored in hand.landmarks,
+									- coordinates expressed in meters in the world, stored in hand.world_landmarks.
+    - xyz: 							boolean, when True calculate the (x, y, z) coords of the detected palms.
+    - crop: 						boolean which indicates if square cropping on source images is applied or not
+    								Default Set to True for matching the square imagesize input of Yolo
+    - internal_fps: 				when using the internal color camera as input source, set its FPS to this value (calling setFps()).
+    - resolution: 					sensor resolution "full" (1920x1080) or "ultra" (3840x2160),
+    - internal_frame_height: 		when using the internal color camera, set the frame height (calling setIspScale()).
+                    				The width is calculated accordingly to height and depends on value of 'crop'.
+    - use_gesture: 					boolean, when True, recognize hand poses froma predefined set of poses
+                    				(ONE, TWO, THREE, FOUR, FIVE, OK, PEACE, FIST)
+    - use_handedness_average: 		boolean, when True the handedness is the average of the last collected handednesses.
+									This brings robustness since the inferred robustness is not reliable on ambiguous hand poses.
+									When False, handedness is the last inferred handedness.
+    - single_hand_tolerance_thresh: Duo mode only; if there is only one hand in a frame, in order to know when a second hand 
+									will appear you need to run the palm detection in the following frames. Because palm detection is slow, 
+									you may want to delay the next time you will run it. 'single_hand_tolerance_thresh' is the number of 
+									frames during only one hand is detected before palm detection is run again.   
+    - lm_nb_threads: 				1 or 2 (default=2), number of inference threads for the landmark model
+    - use_same_image: 				(Edge Duo mode only)boolean, when True, use the same image when inferring the landmarks of the 2 hands
+									(setReusePreviousImage(True) in the ImageManip node before the landmark model). 
+									When True, the FPS is significantly higher but the skeleton may appear shifted on one of the 2 hands.
+	- trace: 						int, 0 = no trace, otherwise print some debug messages or show output of ImageManip nodes
+									if trace & 1, print application level info like number of palm detections,
+									if trace & 2, print lower level info like when a message is sent or received by the manager script node,
+									if trace & 4, show in cv2 windows outputs of ImageManip node,
+									if trace & 8, save in file tmp_code.py the python code of the manager script node
+									Ex: if trace==3, both application and low level info are displayed.
 
 	>> ATTRIBUTES:
 	- def createPipeline(self): 		Define and configure all the Pipeline's Nodes
@@ -62,26 +60,27 @@ class CustomPipeline:
 
 	def __init__(self,
                 pd_score_thresh = 0.9, 
-                pd_nms_thresh = 0.3, 
-                lm_model = "lite", 
+                pd_nms_thresh = 0.3,
                 lm_score_thresh = 0.4, 
                 use_world_landmarks = True,
                 xyz = True,
                 crop = False, 
-                internal_fps = 15, 
-                resolution = "full", 
+                internal_fps = 15,
                 internal_frame_height = 288,
                 use_gesture = True, 
                 use_handedness_average = True, 
                 single_hand_tolerance_thresh = 10, 
                 use_same_image = True,
                 lm_nb_threads = 1, # in [1, 2] == numero di mani. marco aveva messo 2
-                stats = False,
                 trace = 0 
                 ):
 
+		"""
+        Initialize the CustomPipeline class with the given parameters and set up the device.
+        """
+
 		self.palm_detection_model, self.landmark_model, self.post_process_palm_detection_model, self.manager_script_solo = self.getNeuralNetwork()
-  
+
 		assert lm_nb_threads in [1, 2]
 		self.lm_nb_threads = lm_nb_threads
 
@@ -93,14 +92,14 @@ class CustomPipeline:
 		self.xyz = xyz
 		self.crop = crop 
 		self.use_world_landmarks = use_world_landmarks
-		   
+
 		self.trace = trace
 		self.use_gesture = use_gesture
 		self.use_handedness_average = use_handedness_average
 		self.single_hand_tolerance_thresh = single_hand_tolerance_thresh
 		self.use_same_image = use_same_image
 
-		# Device Object Declaration
+		# Device object declaration
 		self.device = dai.Device()
 
 		# ==== Setting Camera Parameters ====
@@ -135,7 +134,7 @@ class CustomPipeline:
 			self.img_h = self.img_w = self.frame_size
 			self.pad_w = self.pad_h = 0
 			self.crop_w = (int(round(self.resolution[0] * self.scale_nd[0] / self.scale_nd[1])) - self.img_w) // 2
-		else: # with crop = False we should have a rectangular 512x288 preview
+		else:
 			width, self.scale_nd = mpu.find_isp_scale_params(internal_frame_height * self.resolution[0] / self.resolution[1], self.resolution, is_height=False)
 			self.img_h = int(round(self.resolution[1] * self.scale_nd[0] / self.scale_nd[1]))
 			self.img_w = int(round(self.resolution[0] * self.scale_nd[0] / self.scale_nd[1]))
@@ -143,6 +142,7 @@ class CustomPipeline:
 			self.pad_w = 0
 			self.frame_size = self.img_w
 			self.crop_w = 0
+
 		print(f"Internal camera image size: {self.img_w} x {self.img_h} - pad_h: {self.pad_h}")
 
 		# ==== Define and start pipeline ====
@@ -156,6 +156,9 @@ class CustomPipeline:
     # ------------------------------------------------------------------------------------------------------------------
 
 	def createPipeline(self):
+		"""
+        Create and configure the pipeline with necessary nodes for processing.
+        """
 		print("Creating pipeline...")
 
 		# Start defining a pipeline
@@ -165,7 +168,7 @@ class CustomPipeline:
 
 		# ==== Manager Script Node ====
 		manager_script = pipeline.create(dai.node.Script)
-		manager_script.setScript(self.build_manager_script()) #Create the Manager Node
+		manager_script.setScript(self.build_manager_script()) #Create the Manager Node from template
 
 		# ==== Camera RGB ====
 		print("Creating Color Camera...")
@@ -279,15 +282,13 @@ class CustomPipeline:
 		stereo_out.setStreamName("stereo")
 		stereo_out.input.setQueueSize(1)
 		stereo_out.input.setBlocking(False)
-		# stereo.disparity.link(stereo_out.input)
 		stereo.depth.link(stereo_out.input)
 
-		left.out.link(stereo.left) #Connect Left Stero Camera to the Stero Node
-		right.out.link(stereo.right) #Connect Right Stero Camera to the Stero Node
+		left.out.link(stereo.left) # Connect Left Stero Camera to the Stero Node
+		right.out.link(stereo.right) # Connect Right Stero Camera to the Stero Node
 		stereo.depth.link(spatial_location_calculator.inputDepth) #Connect Left Stero Camera to the Stero Node
-		manager_script.outputs['spatial_location_config'].link(spatial_location_calculator.inputConfig) #Set by connection Spatial Location Configuration node
-		#NOTE: dato interessante?
-		spatial_location_calculator.out.link(manager_script.inputs['spatial_data']) #Connect spatial_location Data to Manager Script Spatial Data section
+		manager_script.outputs['spatial_location_config'].link(spatial_location_calculator.inputConfig) # Set by connection Spatial Location Configuration node
+		spatial_location_calculator.out.link(manager_script.inputs['spatial_data']) # Connect spatial_location Data to Manager Script Spatial Data section
 
 		# Linking Pre-processing Palm Detection Image Manipulation
 		cam.preview.link(pre_pd_manip.inputImage) #Connect RGb Camera Frames to the Pre-processing Palm Detection Image Manipulation
@@ -314,9 +315,10 @@ class CustomPipeline:
 		manager_script.outputs['host'].link(manager_out.input) #Connect Manager Script to the Host
 
 		print("Pipeline created.")
+
 		return pipeline
     # ------------------------------------------------------------------------------------------------------------------  
-    
+
 	def build_manager_script(self):
 		'''
 		The code of the scripting node 'manager_script' depends on :
@@ -360,7 +362,7 @@ class CustomPipeline:
     # ------------------------------------------------------------------------------------------------------------------
 
 	def getNeuralNetwork(self):
-		#Define Script Folder Path and Get Blob files from Trained Neural Network
+		'''Define Script Folder Path and Get Blob files from Trained Neural Network'''
 		SCRIPT_DIR = "/home/ema/Desktop/depthai-hand-segmentation"
 
 		PALM_DETECTION_MODEL = str(SCRIPT_DIR + "/models/palm_detection_sh4.blob")
@@ -396,14 +398,16 @@ class CustomPipeline:
 	# ------------------------------------------------------------------------------------------------------------------
 
 	def getFrame(self):
-		'''If rgb queue empty, this functoin returns None'''
+		'''If RGB queue empty, this function returns None'''
 		frame_msg = self.cam_video_preview.get()
+
 		return frame_msg.getCvFrame() if frame_msg is not None else None
 	# ------------------------------------------------------------------------------------------------------------------
 
 	def getDepthFrame(self):
 		'''If depth queue empty, this function returns None'''
 		depth_msg = self.stereo_queue.get() # depth frame returns values in mm (millimeter)
+
 		return depth_msg.getFrame() if depth_msg is not None else None
 	# ------------------------------------------------------------------------------------------------------------------
 
