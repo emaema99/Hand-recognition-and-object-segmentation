@@ -9,6 +9,9 @@ import struct
 
 class ArduinoCommunicator:
     def __init__(self, ip='192.168.0.21', port=50000, buffer_size=1):
+        """
+        Initialize the ArduinoCommunicator with IP address, port, and buffer size.
+        """
         self.TCP_IP = ip
         self.TCP_PORT = port
         self.BUFFER_SIZE = buffer_size
@@ -20,6 +23,9 @@ class ArduinoCommunicator:
         self.close()
 
     def connect(self):
+        """
+        Establish a TCP connection to the Arduino.
+        """
         print('Waiting for Simulink to start')
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.setblocking(True)
@@ -27,11 +33,18 @@ class ArduinoCommunicator:
         print("Connection established!")
 
     def send_weight(self, weight):
+        """
+        Send the weight data to the Arduino via TCP.
+        Parameters: weight (float)
+        """
         msg = struct.pack('<f', weight)
         self.socket.send(msg)
         print('Sent data:', weight)
 
     def close(self):
+        '''
+        Close TCP connection
+        '''
         if self.socket:
             self.socket.close()
             print("Connection closed")
