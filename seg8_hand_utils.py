@@ -6,16 +6,16 @@ import depthai as dai
 
 class HostSpatialsCalc:
     '''
-    Class for calculating the depth.
+    Class for calculating the spatial coordinates for a ROI.
     '''
     def __init__(self, device):
-        # Initialize the HostSpatialsCalc class with device calibration data
+        # Initialize the class with device calibration data.
         self.calibData = device.readCalibration()
 
         # Constants for depth processing
         self.DELTA = 5  # Take 10x10 depth pixels around point for depth averaging
         self.THRESH_LOW = 200 # 20 cm
-        self.THRESH_HIGH = 1000 # 1.5 m
+        self.THRESH_HIGH = 1500 # 1.5 m
         self.HFOV = self.calibData.getFov(dai.CameraBoardSocket.CAM_A) # Horizontal field of view of the camera
     # --------------------------------------------------------------------------------------------
 
@@ -28,12 +28,16 @@ class HostSpatialsCalc:
     # --------------------------------------------------------------------------------------------
 
     def setDeltaRoi(self, delta):
-        '''Set the delta value for region of interest (ROI) size around a point'''
+        '''
+        Set the delta value for region of interest (ROI) size around a point.
+        '''
         self.DELTA = delta
     # --------------------------------------------------------------------------------------------
 
     def calc_point_spatial(self, depth_frame, point, margin=5):
-        '''Calculate spatial coordinates for a given point in the depth frame.'''
+        '''
+        Calculate spatial coordinates for a given point in the depth frame.
+        '''
         if margin > 0:
             x = min(max(point[0], margin), depth_frame.shape[1] - margin)
             y = min(max(point[1], margin), depth_frame.shape[0] - margin)
@@ -47,7 +51,9 @@ class HostSpatialsCalc:
     # --------------------------------------------------------------------------------------------
 
     def calc_squared_roi_spatials(self, depth_frame, roi, averaging_method = np.mean):
-        '''Calculate spatial coordinates for a squared region of interest (ROI) in the depth frame'''
+        '''
+        Calculate spatial coordinates for a squared region of interest (ROI) in the depth frame.
+        '''
         xmin, ymin, xmax, ymax = roi
 
         # Calculate the average depth in the ROI.
@@ -75,9 +81,11 @@ class HostSpatialsCalc:
     # --------------------------------------------------------------------------------------------
 
     def calc_roi_spatials(self, depth_frame, roi_pixels, averaging_method = np.mean):
-        '''Calculate spatial coordinates for an arbitrary region of interest (ROI) defined by a set of pixels'''
+        '''
+        Calculate spatial coordinates for an arbitrary region of interest (ROI) defined by a set of pixels in the depth frame.
+        '''
 
-        # Calculate the average depth in the ROI.
+        # Check if data is there
         if depth_frame is None or roi_pixels is None or len(roi_pixels)==0:
             return None, None
 
@@ -106,20 +114,21 @@ class HostSpatialsCalc:
         midH = int(depth_frame.shape[0] / 2)
         bb_x_pos = centroid[0] - midW
         bb_y_pos = centroid[1] - midH
-        print("x_pos_arr x: ", bb_x_pos)
-        print("y_pos_arr y: ", bb_y_pos)
 
         # Calculate angles and spatial coordinates
         angle_x = self._calc_angle(depth_frame, bb_x_pos, self.HFOV)
         angle_y = self._calc_angle(depth_frame, bb_y_pos, self.HFOV)
 
+        # Spatials = x,y,z info
         spatials = np.array([averageDepth * math.tan(angle_x), -averageDepth * math.tan(angle_y), averageDepth])
 
         return spatials, centroid
     # --------------------------------------------------------------------------------------------
 
     def calc_roi_each_point_spatials(self, depth_frame, roi_pixels, down_sampling=1, averaging_method = np.mean):
-        '''Calculate spatial coordinates for each point in an ROI with optional down-sampling'''
+        '''
+        Calculate spatial coordinates for each point in an ROI with optional down-sampling
+        '''
 
         if depth_frame is None or roi_pixels is None or len(roi_pixels)==0:
             return None, None
@@ -187,12 +196,16 @@ class HostSpatialsCalc:
     # --------------------------------------------------------------------------------------------
 
     def _calc_angle(self, frame, offset, HFOV):
-        '''Calculate the angle for a given offset and horizontal field of view'''
+        '''
+        Calculate the angle for a given offset and horizontal field of view
+        '''
         return math.atan(math.tan(HFOV / 2.0) * offset / (frame.shape[1] / 2.0))
     # --------------------------------------------------------------------------------------------
 
     def remove_nan_and_out_of_range_points(self, roi_depth_values, roi_pixels):
-        '''Remove NaN and out-of-range depth values from ROI pixels'''
+        '''
+        Remove NaN and out-of-range depth values from ROI pixels.
+        '''
         indices_not_nan = np.argwhere(~np.isnan(roi_depth_values)).reshape(-1)
         if indices_not_nan.shape[0] < 1:
             return None, None

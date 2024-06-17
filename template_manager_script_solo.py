@@ -20,10 +20,10 @@ ${_TRACE1} ("Starting manager script node")
 
 ${_IF_USE_HANDEDNESS_AVERAGE}
 class HandednessAverage:
-    # Used to store the average handeness
-    # Handedness inferred by the landmark model is not perfect. For certain poses, it is not rare that the model thinks 
-    # that a right hand is a left hand (or vice versa). Instead of using the last inferred handedness, we prefer to use the average 
-    # of the inferred handedness on the last frames. This gives more robustness.
+    '''Used to store the average handeness
+    Handedness inferred by the landmark model is not perfect. For certain poses, it is not rare that the model thinks 
+    that a right hand is a left hand (or vice versa). Instead of using the last inferred handedness, we prefer to use the average 
+    of the inferred handedness on the last frames. This gives more robustness.'''
     def __init__(self):
         self._total_handedness = 0
         self._nb = 0
@@ -37,9 +37,11 @@ class HandednessAverage:
 handedness_avg = HandednessAverage()
 ${_IF_USE_HANDEDNESS_AVERAGE}
 
-# BufferMgr is used to statically allocate buffers once (replaces dynamic allocation).
-# These buffers are used for sending result to host efficently
 class BufferMgr:
+    '''
+    BufferMgr is used to statically allocate buffers once (replaces dynamic allocation).
+    These buffers are used for sending result to host efficently.
+    '''
     def __init__(self):
         self._bufs = {}
     def __call__(self, size):
@@ -59,10 +61,14 @@ def send_result(result):
     node.io['host'].send(buffer)
     ${_TRACE2} ("Manager sent result to host")
 
-# pd_inf: boolean. Has the palm detection run on the frame ?
-# nb_lm_inf: 0 or 1 (or 2 in duo mode). Number of landmark regression inferences on the frame.
-# pd_inf = True, nb_lm_inf = 0 means the palm detection hasn't found any hand
-# pd_inf, nb_lm_inf are used for statistics
+'''
+pd_inf:     boolean. Has the palm detection run on the frame?
+nb_lm_inf:  0 or 1 (or 2 in duo mode). Number of landmark regression inferences on the frame.
+
+pd_inf = True, nb_lm_inf = 0 means the palm detection hasn't found any hand
+pd_inf, nb_lm_inf are used for statistics
+'''
+
 def send_result_no_hand(pd_inf, nb_lm_inf):
     result = dict([("pd_inf", pd_inf), ("nb_lm_inf", nb_lm_inf)])
     send_result(result)
@@ -74,19 +80,24 @@ def send_result_hand(pd_inf, nb_lm_inf, lm_score=0, handedness=0, rect_center_x=
     send_result(result)
 
 def rr2img(rrn_x, rrn_y):
-    # Convert a point (rrn_x, rrn_y) expressed in normalized rotated rectangle (rrn)
-    # into (X, Y) expressed in normalized image (sqn)
+    '''
+    Convert a point (rrn_x, rrn_y) expressed in normalized rotated rectangle (rrn) into (X, Y) expressed in normalized image (sqn)
+    '''
     X = sqn_rr_center_x + sqn_rr_size * ((rrn_x - 0.5) * cos_rot + (0.5 - rrn_y) * sin_rot)
     Y = sqn_rr_center_y + sqn_rr_size * ((rrn_y - 0.5) * cos_rot + (rrn_x - 0.5) * sin_rot)
     return X, Y
 
 def normalize_radians(angle):
-    # normalizes angles to the range [−π,π][−π,π]
+    '''
+    Normalizes angles to the range [−π,π][−π,π]
+    '''
     return angle - 2 * pi * floor((angle + pi) / (2 * pi))
 
-# send_new_frame_to_branch defines on which branch new incoming frames are sent
-# 1 = palm detection branch 
-# 2 = hand landmark branch
+'''
+Send_new_frame_to_branch defines on which branch new incoming frames are sent:
+1 = palm detection branch 
+2 = hand landmark branch
+'''
 send_new_frame_to_branch = 1
 
 cfg_pre_pd = ImageManipConfig() # set up for pre-processing palm detection with a thumbnail resize configuration
@@ -123,8 +134,6 @@ while True:
             continue
         ${_TRACE1} (f"Palm detection - hand detected")
 
-        # scale_center_x = sqn_scale_x - sqn_rr_center_x
-        # scale_center_y = sqn_scale_y - sqn_rr_center_y
         # If a palm is detected, it computes the rotation and center of the hand's bounding box
         kp02_x = kp2_x - kp0_x
         kp02_y = kp2_y - kp0_y
@@ -191,20 +200,7 @@ while True:
         THE SPATIAL LOCATION FOR EACH OF THEM.
         THIS PROCEDURE SLOWDOWN THE PREVIEW, HENCE IS BETTER TO EXTRACT
         THE SPATIAL COORDINATE JUST FOR FEW OF THEM.
-        THE LANDMARK SEQUENCE CAN BE FOUND
-        IN THE README OF THE ORIGINAL REPOS
-        rect_size = Size2f(zone_size, zone_size)
-        cfg = SpatialLocationCalculatorConfig()
-        c_x = c_y = rect_center = xyz_lms = temp = []
-        for i in range(0,len(sqn_lms),2):
-            c_x = int(sqn_lms[i] * frame_size -zone_size/2 + crop_w)
-            c_y = int(sqn_lms[i+1] * frame_size -zone_size/2 - pad_h)
-            rect_center = Point2f(c_x, c_y)
-            conf_data.roi = Rect(rect_center, rect_size)
-            cfg.addROI(conf_data)
-            node.io['spatial_location_config'].send(cfg)
-            temp = node.io['spatial_data'].get().getSpatialLocations()
-            xyz_lms.append([temp[0].spatialCoordinates.x, temp[0].spatialCoordinates.y, temp[0].spatialCoordinates.z])
+        THE LANDMARK SEQUENCE CAN BE FOUND IN THE README OF THE ORIGINAL REPOS
         '''
 
         #Change the idx here to select the landmarks following

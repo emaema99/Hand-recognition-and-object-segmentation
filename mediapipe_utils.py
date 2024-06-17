@@ -11,29 +11,29 @@ np.seterr(over = 'ignore')
 
 class HandRegion:
     """
-        Attributes:
-        pd_score : detection score
-        pd_box : detection box [x, y, w, h], normalized [0,1] in the squared image
-        pd_kps : detection keypoints coordinates [x, y], normalized [0,1] in the squared image
-        rect_x_center, rect_y_center : center coordinates of the rotated bounding rectangle, normalized [0,1] in the squared image
-        rect_w, rect_h : width and height of the rotated bounding rectangle, normalized in the squared image (may be > 1)
-        rotation : rotation angle of rotated bounding rectangle with y-axis in radian
-        rect_x_center_a, rect_y_center_a : center coordinates of the rotated bounding rectangle, in pixels in the squared image
-        rect_w, rect_h : width and height of the rotated bounding rectangle, in pixels in the squared image
-        rect_points : list of the 4 points coordinates of the rotated bounding rectangle, in pixels 
-                expressed in the squared image during processing,
-                expressed in the source rectangular image when returned to the user
-        lm_score: global landmark score
-        norm_landmarks : 3D landmarks coordinates in the rotated bounding rectangle, normalized [0,1]
-        landmarks : 2D landmark coordinates in pixel in the source rectangular image
-        world_landmarks : 3D landmark coordinates in meter
-        handedness: float between 0. and 1., > 0.5 for right hand, < 0.5 for left hand,
-        label: "left" or "right", handedness translated in a string,
-        xyz: real 3D world coordinates of the wrist landmark, or of the palm center (if landmarks are not used),
-        xyz_zone: (left, top, right, bottom), pixel coordinates in the source rectangular image 
-                of the rectangular zone used to estimate the depth
-        gesture: (optional, set in recognize_gesture() when use_gesture==True) string corresponding to recognized gesture ("ONE","TWO","THREE","FOUR","FIVE","FIST","OK","PEACE") 
-                or None if no gesture has been recognized
+        >> Attributes:
+
+        pd_score:                           detection score
+        pd_box:                             detection box [x, y, w, h], normalized [0,1] in the squared image
+        pd_kps:                             detection keypoints coordinates [x, y], normalized [0,1] in the squared image
+        rect_x_center, rect_y_center:       center coordinates of the rotated bounding rectangle, normalized [0,1] in the squared image
+        rect_w, rect_h:                     width and height of the rotated bounding rectangle, normalized in the squared image (may be > 1)
+        rotation:                           rotation angle of rotated bounding rectangle with y-axis in radian
+        rect_x_center_a, rect_y_center_a:   center coordinates of the rotated bounding rectangle, in pixels in the squared image
+        rect_w, rect_h:                     width and height of the rotated bounding rectangle, in pixels in the squared image
+        rect_points:                        list of the 4 points coordinates of the rotated bounding rectangle, in pixels 
+                                            expressed in the squared image during processing,
+                                            expressed in the source rectangular image when returned to the user
+        lm_score:                           global landmark score
+        norm_landmarks:                     3D landmarks coordinates in the rotated bounding rectangle, normalized [0,1]
+        landmarks:                          2D landmark coordinates in pixel in the source rectangular image
+        world_landmarks:                    3D landmark coordinates in meter
+        handedness:                         float between 0. and 1., > 0.5 for right hand, < 0.5 for left hand,
+        label:                              "left" or "right", handedness translated in a string,
+        xyz:                                real 3D world coordinates of the wrist landmark, or of the palm center (if landmarks are not used),
+        xyz_zone:                           (left, top, right, bottom), pixel coordinates in the source rectangular image 
+                                            of the rectangular zone used to estimate the depth
+        gesture:                            Tells if grasping action is recognised or not.
         """
     def __init__(self, pd_score=None, pd_box=None, pd_kps=None):
         self.pd_score = pd_score # Palm detection score 
@@ -52,10 +52,11 @@ class HandRegion:
     def print(self):
         attrs = vars(self)
         print('\n'.join("%s: %s" % item for item in attrs.items()))
+# -------------------------------------------------------------------------------------------------------------
 
 class HandednessAverage:
     """
-    Used to store the average handeness
+    Class used to store the average handeness (left/right).
     Handedness inferred by the landmark model is not perfect. For certain poses, it is not rare that the model thinks 
     that a right hand is a left hand (or vice versa). Instead of using the last inferred handedness, we prefer to use the average 
     of the inferred handedness on the last frames. This gives more robustness.
@@ -63,14 +64,18 @@ class HandednessAverage:
     def __init__(self):
         self._total_handedness = 0
         self._nb = 0
+
     def update(self, new_handedness):
         self._total_handedness += new_handedness
         self._nb += 1
         return self._total_handedness / self._nb
+    
     def reset(self):
         self._total_handedness = self._nb = 0
+# -------------------------------------------------------------------------------------------------------------
 
-SSDAnchorOptions = namedtuple('SSDAnchorOptions',[
+SSDAnchorOptions = namedtuple(
+    'SSDAnchorOptions',[
         'num_layers',
         'min_scale',
         'max_scale',
@@ -94,12 +99,13 @@ def calculate_scale(min_scale, max_scale, stride_index, num_strides):
 
 def generate_anchors(options):
     """
-    option : SSDAnchorOptions
+    Options : SSDAnchorOptions
     # https://github.com/google/mediapipe/blob/master/mediapipe/calculators/tflite/ssd_anchors_calculator.cc
     """
     anchors = []
     layer_id = 0
     n_strides = len(options.strides)
+
     while layer_id < n_strides:
         anchor_height = []
         anchor_width = []
@@ -107,6 +113,7 @@ def generate_anchors(options):
         scales = []
         # For same strides, we merge the anchors in the same order.
         last_same_stride_layer = layer_id
+
         while last_same_stride_layer < n_strides and \
                 options.strides[last_same_stride_layer] == options.strides[layer_id]:
             scale = calculate_scale(options.min_scale, options.max_scale, last_same_stride_layer, n_strides)
@@ -125,7 +132,7 @@ def generate_anchors(options):
                     scales.append(sqrt(scale * scale_next))
                     aspect_ratios.append(options.interpolated_scale_aspect_ratio)
             last_same_stride_layer += 1
-        
+
         for i,r in enumerate(aspect_ratios):
             ratio_sqrts = sqrt(r)
             anchor_height.append(scales[i] / ratio_sqrts)
@@ -152,23 +159,26 @@ def generate_anchors(options):
                     anchors.append(new_anchor)
         
         layer_id = last_same_stride_layer
+
     return np.array(anchors)
 # -------------------------------------------------------------------------------------------------------------
 
 def generate_handtracker_anchors(input_size_width, input_size_height):
-    # https://github.com/google/mediapipe/blob/master/mediapipe/modules/palm_detection/palm_detection_cpu.pbtxt
-    anchor_options = SSDAnchorOptions(num_layers = 4, 
-                            min_scale = 0.1484375,
-                            max_scale = 0.75,
-                            input_size_height = input_size_height,
-                            input_size_width = input_size_width,
-                            anchor_offset_x = 0.5,
-                            anchor_offset_y = 0.5,
-                            strides = [8, 16, 16, 16],
-                            aspect_ratios = [1.0],
-                            reduce_boxes_in_lowest_layer = False,
-                            interpolated_scale_aspect_ratio = 1.0,
-                            fixed_anchor_size = True)
+    ''' https://github.com/google/mediapipe/blob/master/mediapipe/modules/palm_detection/palm_detection_cpu.pbtxt'''
+    anchor_options = SSDAnchorOptions(
+        num_layers = 4,
+        min_scale = 0.1484375,
+        max_scale = 0.75,
+        input_size_height = input_size_height,
+        input_size_width = input_size_width,
+        anchor_offset_x = 0.5,
+        anchor_offset_y = 0.5,
+        strides = [8, 16, 16, 16],
+        aspect_ratios = [1.0],
+        reduce_boxes_in_lowest_layer = False,
+        interpolated_scale_aspect_ratio = 1.0,
+        fixed_anchor_size = True)
+    
     return generate_anchors(anchor_options)
 # -------------------------------------------------------------------------------------------------------------
 
@@ -239,6 +249,7 @@ def decode_bboxes(score_thresh, scores, bboxes, anchors, scale = 128, best_only 
     """
     regions = []
     scores = 1 / (1 + np.exp(-scores))
+
     if best_only:
         best_id = np.argmax(scores)
         if scores[best_id] < score_thresh: return regions
@@ -270,11 +281,11 @@ def decode_bboxes(score_thresh, scores, bboxes, anchors, scale = 128, best_only 
         # 4 : little finger joint
         # 5 : 
         # 6 : thumb joint
-        # for j, name in enumerate(["0", "1", "2", "3", "4", "5", "6"]):
-        #     kps[name] = det_bboxes[i,4+j*2:6+j*2]
         for kp in range(7):
             kps.append(det_bboxes[i,4+kp*2:6+kp*2])
+
         regions.append(HandRegion(float(score), box, kps))
+
     return regions
 # -------------------------------------------------------------------------------------------------------------
 
@@ -348,7 +359,6 @@ def detections_to_rect(regions):
 def rotated_rect_to_points(cx, cy, w, h, rotation):
     b = cos(rotation) * 0.5
     a = sin(rotation) * 0.5
-    points = []
     p0x = cx - a*h - b*w
     p0y = cy + b*h - a*w
     p1x = cx + a*h - b*w
@@ -358,34 +368,35 @@ def rotated_rect_to_points(cx, cy, w, h, rotation):
     p3x = int(2*cx - p1x)
     p3y = int(2*cy - p1y)
     p0x, p0y, p1x, p1y = int(p0x), int(p0y), int(p1x), int(p1y)
+
     return [[p0x,p0y], [p1x,p1y], [p2x,p2y], [p3x,p3y]]
 # -------------------------------------------------------------------------------------------------------------
 
 def rect_transformation(regions, w, h):
-    """
-    w, h : image input shape
-    """
-    # https://github.com/google/mediapipe/blob/master/mediapipe/modules/hand_landmark/palm_detection_detection_to_roi.pbtxt
-    # # Expands and shifts the rectangle that contains the palm so that it's likely
-    # # to cover the entire hand.
-    # node {
-    # calculator: "RectTransformationCalculator"
-    # input_stream: "NORM_RECT:raw_roi"
-    # input_stream: "IMAGE_SIZE:image_size"
-    # output_stream: "roi"
-    # options: {
-    #     [mediapipe.RectTransformationCalculatorOptions.ext] {
-    #     scale_x: 2.6
-    #     scale_y: 2.6
-    #     shift_y: -0.5
-    #     square_long: true
-    #     }
-    # }
-    # IMHO 2.9 is better than 2.6. With 2.6, it may happen that finger tips stay outside of the bouding rotated rectangle
+    '''
+    w, h : image input shape.
+    https://github.com/google/mediapipe/blob/master/mediapipe/modules/hand_landmark/palm_detection_detection_to_roi.pbtxt
+    Expands and shifts the rectangle that contains the palm so that it's likely to cover the entire hand.
+    node {
+    calculator: "RectTransformationCalculator"
+    input_stream: "NORM_RECT:raw_roi"
+    input_stream: "IMAGE_SIZE:image_size"
+    output_stream: "roi"
+    options: {
+        [mediapipe.RectTransformationCalculatorOptions.ext] {
+        scale_x: 2.6
+        scale_y: 2.6
+        shift_y: -0.5
+        square_long: true
+        }
+    }
+    IMHO 2.9 is better than 2.6. With 2.6, it may happen that finger tips stay outside of the bouding rotated rectangle
+    '''
     scale_x = 2.9
     scale_y = 2.9
     shift_x = 0
     shift_y = -0.5
+
     for region in regions:
         width = region.rect_w
         height = region.rect_h
@@ -399,7 +410,6 @@ def rect_transformation(regions, w, h):
             region.rect_x_center_a = region.rect_x_center*w + x_shift
             region.rect_y_center_a = region.rect_y_center*h + y_shift
 
-        # square_long: true
         long_side = max(width * w, height * h)
         region.rect_w_a = long_side * scale_x
         region.rect_h_a = long_side * scale_y
@@ -407,14 +417,15 @@ def rect_transformation(regions, w, h):
 # -------------------------------------------------------------------------------------------------------------
 
 def hand_landmarks_to_rect(hand):
-    # Calculates the ROI for the next frame from the current hand landmarks
+    '''
+    Calculates the ROI for the next frame from the current hand landmarks
+    '''
     id_wrist = 0
     id_index_mcp = 5
     id_middle_mcp = 9
     id_ring_mcp =13
     
     lms_xy =  hand.landmarks[:,:2]
-    # print(lms_xy)
     # Compute rotation
     x0, y0 = lms_xy[id_wrist]
     x1, y1 = 0.25 * (lms_xy[id_index_mcp] + lms_xy[id_ring_mcp]) + 0.5 * lms_xy[id_middle_mcp]
@@ -441,6 +452,7 @@ def hand_landmarks_to_rect(hand):
     next_hand.rect_y_center_a = center[1] - 0.1 * height * c
     next_hand.rotation = rotation
     next_hand.rect_points = rotated_rect_to_points(next_hand.rect_x_center_a, next_hand.rect_y_center_a, next_hand.rect_w_a, next_hand.rect_h_a, next_hand.rotation)
+
     return next_hand
 # -------------------------------------------------------------------------------------------------------------
 
@@ -448,6 +460,7 @@ def warp_rect_img(rect_points, img, w, h):
         src = np.array(rect_points[1:], dtype=np.float32) # rect_points[0] is left bottom point !
         dst = np.array([(0, 0), (h, 0), (h, w)], dtype=np.float32)
         mat = cv2.getAffineTransform(src, dst)
+
         return cv2.warpAffine(img, mat, (w, h))
 # -------------------------------------------------------------------------------------------------------------
 
@@ -459,8 +472,8 @@ def distance(a, b):
 # -------------------------------------------------------------------------------------------------------------
 
 def angle(a, b, c):
-    # https://stackoverflow.com/questions/35176451/python-code-to-calculate-angle-between-three-point-using-their-3d-coordinates
-    # a, b and c : points as np.array([x, y, z]) 
+    '''https://stackoverflow.com/questions/35176451/python-code-to-calculate-angle-between-three-point-using-their-3d-coordinates.
+    a, b and c : points as np.array([x, y, z])''' 
     ba = a - b
     bc = c - b
     cosine_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc))
@@ -498,7 +511,7 @@ def find_isp_scale_params(size, resolution, is_height=True):
         d = reference//f
         if n <= 16 and d <= 63 and int(round(other * n / d) % 2 == 0):
             size_candidates[s] = (n, d)
-            
+
     # What is the candidate size closer to 'size' ?
     min_dist = -1
     for s in size_candidates:
@@ -510,12 +523,14 @@ def find_isp_scale_params(size, resolution, is_height=True):
             if dist > min_dist: break
             candidate = s
             min_dist = dist
+
     return candidate, size_candidates[candidate]
 # -------------------------------------------------------------------------------------------------------------
 
 def recognize_gesture(hand):           
     '''
-    Finger states: (-1) = unknown, (0) = close, (1) = open
+    Finger states: (-1) = unknown, (0) = close, (1) = open.
+    Grasping/not grasping state based on fingers state: if >= 3 fingers are open, we assume no grasping happens.
     '''
     d_3_5 = distance(hand.norm_landmarks[3], hand.norm_landmarks[5])
     d_2_3 = distance(hand.norm_landmarks[2], hand.norm_landmarks[3])
@@ -565,4 +580,4 @@ def recognize_gesture(hand):
         hand.is_grasping = False
  
     return hand
-# ------------------------------------------------------------------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------------------------------------

@@ -22,7 +22,6 @@ class Seg8:
 		self.__class_weight = [0.486, 1.350, 0.930]	# [kg]
 		self.__path_to_yolo = path_to_yolo
 
-		# Initialize frame and result placeholders and flags.
 		self.__frame = None
 		self.__depth_frame = None
 		self.__new_frame_ready = False
@@ -34,13 +33,15 @@ class Seg8:
 		self.__obj_masks_distance = []
 		self.__stop = False
 
-		# Threads for YOLO.
+		# Threads for YOLO
 		self.__yolo_thread = threading.Thread(target=self.__yolo_predict)
 		self.__post_processing_thread = threading.Thread(target=self.__post_processing)
 	# ---------------------------------------------------------------------------------------------------
 
 	def __del__(self):
-		''' Destructor to ensure threads are stopped and joined properly.'''
+		'''
+		Destructor to ensure threads are stopped and joined properly
+		'''
 		self.stop_threads()
 		self.__stop = True
 		self.__yolo_thread.join()
@@ -48,7 +49,9 @@ class Seg8:
 	# ---------------------------------------------------------------------------------------------------
 
 	def start_threads(self):
-		'''Method to start YOLO prediction and post-processing threads to ensure efficient processing.'''
+		'''
+		Method to start YOLO prediction and post-processing threads to ensure efficient processing
+		'''
 		self.__frame = None
 		self.__depth_frame = None
 		self.__new_frame_ready = False
@@ -65,12 +68,16 @@ class Seg8:
 	# ---------------------------------------------------------------------------------------------------
 
 	def stop_threads(self):
-		'''Method to signal threads to stop.'''
+		'''
+		Method to signal threads to stop
+		'''
 		self.__stop = True
 	# ---------------------------------------------------------------------------------------------------
 
 	def __yolo_predict(self):
-		'''YOLO prediction thread method'''
+		'''
+		YOLO result prediction thread method
+		'''
 		model = YOLO(self.__path_to_yolo, verbose=False)
 		
 		# Wait until a frame is available or stop signal is received
@@ -154,7 +161,9 @@ class Seg8:
 	# ---------------------------------------------------------------------------------------------------
 
 	def get_result_class_list(self):
-		'''Method to retrieve the list of detected classes.'''
+		'''
+		Method to retrieve the list of detected classes
+		'''
 		if self.__seg8_result is not None and self.__seg8_result.boxes is not None:
 			return [int(cls) for cls in self.__seg8_result.boxes.cls.tolist()]
 		else:
@@ -162,17 +171,23 @@ class Seg8:
 	# ---------------------------------------------------------------------------------------------------
 
 	def get_class_names(self):
-		'''Method to retrieve the class names.'''
+		'''
+		Method to retrieve the class names
+		'''
 		return self.__class_names
 	# ---------------------------------------------------------------------------------------------------
 
 	def get_class_weight(self):
-		'''Method to retrieve the class weights.'''
+		'''
+		Method to retrieve the class weights
+		'''
 		return self.__class_weight
 	# ---------------------------------------------------------------------------------------------------
 
 	def get_annotated_frame(self):
-		'''Method to retrieve the annotated frame if ready'''
+		'''
+		Method to retrieve the annotated frame if ready
+		'''
 		if self.__annotated_frame_ready:
 			self.__annotated_frame_ready = False
 			return self.__annotated_frame
@@ -181,17 +196,23 @@ class Seg8:
 	# ---------------------------------------------------------------------------------------------------
 	
 	def get_obj_masks_indices(self):
-		'''Method to retrieve object mask indices'''
+		'''
+		Method to retrieve object mask indices
+		'''
 		return self.__obj_masks_indices
 	# ---------------------------------------------------------------------------------------------------
 
 	def get_obj_masks_distance(self):
-		'''Method to retrieve object mask distances'''
+		'''
+		Method to retrieve object mask distances
+		'''
 		return self.__obj_masks_distance
 	# ---------------------------------------------------------------------------------------------------
 
 	def update(self, frame, depth_frame):
-		'''This function must be called in a loop'''
+		'''
+		This function must be called in a loop
+		'''
 		# Update the current frame and depth frame
 		self.__frame = frame
 		self.__depth_frame = depth_frame

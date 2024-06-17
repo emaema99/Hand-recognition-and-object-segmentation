@@ -2,13 +2,12 @@
 
 import numpy as np
 import mediapipe_utils as mpu
-import depthai as dai
 import marshal
 
-from string import Template
-from collections import namedtuple
-
 class HandTracker:
+    '''
+    Class for initialize and run the HandTracker algorithm from Mediapipe.
+    '''
     def __init__(self, frame_size, pad_h, pad_w, lm_score_thresh):
         self.frame_size = frame_size
         self.pad_h = pad_h
@@ -18,6 +17,9 @@ class HandTracker:
     # ---------------------------------------------------------------------------------------------------
 
     def extract_hand_data(self, res, hand_idx):
+        '''
+        Returns data info such as depth, landmarks and gestures.
+        '''
         hand = mpu.HandRegion()
 
         hand.rect_x_center_a = res["rect_center_x"][hand_idx] * self.frame_size
@@ -58,9 +60,12 @@ class HandTracker:
     # ---------------------------------------------------------------------------------------------------
 
     def getHandsData(self, handsData):
-        # Get Results from Manager Script
+        '''
+        Get Results from Manager Script "template_manager_script_solo.py"
+        '''
         handsResult = marshal.loads(handsData)
         hands = []
+
         for i in range(len(handsResult.get("lm_score",[]))):
             hand = self.extract_hand_data(handsResult, i)
             hands.append(hand)

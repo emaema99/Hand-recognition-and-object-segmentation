@@ -13,6 +13,9 @@ LINES_HAND = [
     ]
 
 class HandTrackerRenderer:
+    '''
+    Class for rendering the hand landmarks and lines over the original frame.
+    '''
     def __init__(self, tracker, output = None):
         self.tracker = tracker
         self.frame = []
@@ -33,6 +36,7 @@ class HandTrackerRenderer:
     def norm2abs(self, x_y):
         x = int(x_y[0] * self.tracker.frame_size - self.tracker.pad_w)
         y = int(x_y[1] * self.tracker.frame_size - self.tracker.pad_h)
+
         return (x, y)
     # ------------------------------------------------------------------------------------------------------------------
 
@@ -134,22 +138,27 @@ class HandTrackerRenderer:
             # Draw inferences status
             h = self.frame.shape[0]
             u = h // 10
-            # status=""
             if bag.get("bpf_inference", 0):
                 cv2.rectangle(self.frame, (u, 8*u), (2*u, 9*u), (255,144,30), -1)
+
             if bag.get("pd_inference", 0):
                 cv2.rectangle(self.frame, (2*u, 8*u), (3*u, 9*u), (0,255,0), -1)
+
             nb_lm_inferences = bag.get("lm_inference", 0)
+
             if nb_lm_inferences:
                 cv2.rectangle(self.frame, (3*u, 8*u), ((3+nb_lm_inferences)*u, 9*u), (0,0,255), -1)
     # ------------------------------------------------------------------------------------------------------------------
 
     def draw(self, frame, hands, bag={}):
         self.frame = frame
+
         if bag:
             self.draw_bag(bag)
+
         for hand in hands:
             self.draw_hand(hand)
+
         return self.frame
     # ------------------------------------------------------------------------------------------------------------------
 

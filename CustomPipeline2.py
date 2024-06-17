@@ -59,20 +59,20 @@ class CustomPipeline:
     """
 
 	def __init__(self,
-                pd_score_thresh = 0.9, 
+                pd_score_thresh = 0.9,
                 pd_nms_thresh = 0.3,
-                lm_score_thresh = 0.4, 
+                lm_score_thresh = 0.4,
                 use_world_landmarks = True,
                 xyz = True,
-                crop = False, 
+                crop = False,
                 internal_fps = 15,
                 internal_frame_height = 288,
-                use_gesture = True, 
-                use_handedness_average = True, 
-                single_hand_tolerance_thresh = 10, 
+                use_gesture = True,
+                use_handedness_average = True,
+                single_hand_tolerance_thresh = 10,
                 use_same_image = True,
-                lm_nb_threads = 1, # in [1, 2] == numero di mani. marco aveva messo 2
-                trace = 0 
+                lm_nb_threads = 2,
+                trace = 0
                 ):
 
 		"""
@@ -173,8 +173,6 @@ class CustomPipeline:
 		# ==== Camera RGB ====
 		print("Creating Color Camera...")
 		cam = pipeline.createColorCamera()
-
-		# Properties
 		cam.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1080_P)
 		cam.setBoardSocket(dai.CameraBoardSocket.CAM_A)
 		cam.setColorOrder(dai.ColorCameraProperties.ColorOrder.BGR)
@@ -186,17 +184,15 @@ class CustomPipeline:
 
 		# ==== Stereo and Depth Camera ====
 		print("Creating MonoCameras, Stereo and SpatialLocationCalculator nodes...")
-		# For now, RGB needs fixed focus to properly align with depth
 		calib_data = self.device.readCalibration()
 		calib_lens_pos = calib_data.getLensPosition(dai.CameraBoardSocket.CAM_A)
 		print(f"RGB calibration lens position: {calib_lens_pos}")
-		cam.initialControl.setManualFocus(calib_lens_pos)
+		cam.initialControl.setManualFocus(calib_lens_pos) # RGB needs fixed focus to properly align with depth
 
 		left = pipeline.createMonoCamera()
 		right = pipeline.createMonoCamera()
 		stereo = pipeline.createStereoDepth()
 
-		# Properties
 		left.setBoardSocket(dai.CameraBoardSocket.CAM_B)
 		left.setCamera("left")
 		left.setResolution(dai.MonoCameraProperties.SensorResolution.THE_480_P)
@@ -208,26 +204,21 @@ class CustomPipeline:
 		right.setFps(self.internal_fps)
 
 		stereo.setDefaultProfilePreset(dai.node.StereoDepth.PresetMode.HIGH_DENSITY)
-		stereo.setConfidenceThreshold(150) #230
+		stereo.setConfidenceThreshold(150)
 		stereo.setLeftRightCheck(True) # LR-check is required for depth alignment
 		stereo.setDepthAlign(dai.CameraBoardSocket.CAM_A)
-		stereo.setSubpixel(False)  # subpixel True brings latency
+		stereo.setSubpixel(False) # SubPixel=True brings latency
 
 		# === Spatial Location Calculator ====
 		spatial_location_calculator = pipeline.createSpatialLocationCalculator()
-
-		# Properties
 		spatial_location_calculator.setWaitForConfigInput(True)
 		spatial_location_calculator.inputDepth.setBlocking(False)
 		spatial_location_calculator.inputDepth.setQueueSize(1)
 
 		# ==== Pre-processing Palm Detection Image Manipulation ====
-		# Define palm detection pre processing: resize preview to (self.pd_input_length, self.pd_input_length)
 		print("Creating Palm Detection pre processing image manip...")
 		pre_pd_manip = pipeline.create(dai.node.ImageManip)
-
-		# Properties 
-		pre_pd_manip.setMaxOutputFrameSize(self.pd_input_length*self.pd_input_length*3) # palm det input length = 128
+		pre_pd_manip.setMaxOutputFrameSize(self.pd_input_length*self.pd_input_length*3) # palm detection NN input length = 128
 		pre_pd_manip.setWaitForConfigInput(True)
 		pre_pd_manip.inputImage.setQueueSize(1)
 		pre_pd_manip.inputImage.setBlocking(False)
@@ -235,35 +226,25 @@ class CustomPipeline:
 		# ==== Palm Detection ====
 		print("Creating Palm Detection Neural Network...")
 		pd_nn = pipeline.create(dai.node.NeuralNetwork)
-
-		# Properties
 		pd_nn.setBlobPath(self.palm_detection_model)
 
 		# ==== Post-processing Palm Detection ====
 		print("Creating Palm Detection post processing Neural Network...")
 		post_pd_nn = pipeline.create(dai.node.NeuralNetwork)
-
-		# Properties
 		post_pd_nn.setBlobPath(self.post_process_palm_detection_model)
-
 
 		# ==== Pre-processing Landmark Image Manipulation ====
 		print("Creating Hand Landmark pre processing image manip...") 
 		pre_lm_manip = pipeline.create(dai.node.ImageManip)
-
-		# Properties
 		self.lm_input_length = 224
 		pre_lm_manip.setMaxOutputFrameSize(self.lm_input_length*self.lm_input_length*3)
 		pre_lm_manip.setWaitForConfigInput(True)
 		pre_lm_manip.inputImage.setQueueSize(1)
 		pre_lm_manip.inputImage.setBlocking(False)
 
-
 		# ==== Landmark Detection ====
 		print(f"Creating Hand Landmark Neural Network ({'1 thread' if self.lm_nb_threads == 1 else '2 threads'})...")          
 		lm_nn = pipeline.create(dai.node.NeuralNetwork)
-
-		# Properties
 		lm_nn.setBlobPath(self.landmark_model)
 		lm_nn.setNumInferenceThreads(self.lm_nb_threads)
 
@@ -276,7 +257,7 @@ class CustomPipeline:
 		cam_out.input.setQueueSize(1)
 		cam_out.input.setBlocking(False)
 		cam.preview.link(cam_out.input)
-		
+
 		# Linking Stereo and Depth Camera
 		stereo_out = pipeline.createXLinkOut()
 		stereo_out.setStreamName("stereo")
@@ -286,7 +267,7 @@ class CustomPipeline:
 
 		left.out.link(stereo.left) # Connect Left Stero Camera to the Stero Node
 		right.out.link(stereo.right) # Connect Right Stero Camera to the Stero Node
-		stereo.depth.link(spatial_location_calculator.inputDepth) #Connect Left Stero Camera to the Stero Node
+		stereo.depth.link(spatial_location_calculator.inputDepth) # Connect Left Stero Camera to the Stero Node
 		manager_script.outputs['spatial_location_config'].link(spatial_location_calculator.inputConfig) # Set by connection Spatial Location Configuration node
 		spatial_location_calculator.out.link(manager_script.inputs['spatial_data']) # Connect spatial_location Data to Manager Script Spatial Data section
 
@@ -298,21 +279,21 @@ class CustomPipeline:
 		pre_pd_manip.out.link(pd_nn.input) #Connect Pre-processing Palm Detection Image Manipulation to the Palm Detection Node
 
 		# Linking Post-processing Palm Detection
-		pd_nn.out.link(post_pd_nn.input) #Connect Palm Detection Node to the Post-processing Palm Detection
-		post_pd_nn.out.link(manager_script.inputs['from_post_pd_nn']) #Connect Post-processing Palm Detection to the Manager Script Palm Section
+		pd_nn.out.link(post_pd_nn.input) # Connect Palm Detection Node to the Post-processing Palm Detection
+		post_pd_nn.out.link(manager_script.inputs['from_post_pd_nn']) # Connect Post-processing Palm Detection to the Manager Script Palm Section
 
 		# Linking Pre-processing Landmark Image Manipulation
-		cam.preview.link(pre_lm_manip.inputImage) #Connect RGb Camera Frames to the Pre-processing Landmarks Image Manipulation
-		manager_script.outputs['pre_lm_manip_cfg'].link(pre_lm_manip.inputConfig) #Set by connection Pre-processing Landmark Image Manipulation Configuration 
+		cam.preview.link(pre_lm_manip.inputImage) # Connect RGb Camera Frames to the Pre-processing Landmarks Image Manipulation
+		manager_script.outputs['pre_lm_manip_cfg'].link(pre_lm_manip.inputConfig) # Set by connection Pre-processing Landmark Image Manipulation Configuration 
 
 		# Linking Landmark Detection
-		pre_lm_manip.out.link(lm_nn.input) #Connect Pre-processing Landmark to Landmark Detection
-		lm_nn.out.link(manager_script.inputs['from_lm_nn']) #Connect Landmark Detection to the Manager Script Landmark Section
+		pre_lm_manip.out.link(lm_nn.input) # Connect Pre-processing Landmark to Landmark Detection
+		lm_nn.out.link(manager_script.inputs['from_lm_nn']) # Connect Landmark Detection to the Manager Script Landmark Section
 
 		# Linking Manager Script 
 		manager_out = pipeline.createXLinkOut()
 		manager_out.setStreamName("manager_out")
-		manager_script.outputs['host'].link(manager_out.input) #Connect Manager Script to the Host
+		manager_script.outputs['host'].link(manager_out.input) # Connect Manager Script to the Host
 
 		print("Pipeline created.")
 
@@ -323,7 +304,8 @@ class CustomPipeline:
 		'''
 		The code of the scripting node 'manager_script' depends on :
 		    - the score threshold,
-		    - the video frame shape
+		    - the video frame shape.
+
 		So we build this code from the content of the file template_manager_script_*.py which is a python template
 		'''
 		# Read the template from SOLO
@@ -332,27 +314,27 @@ class CustomPipeline:
 
 		# Perform the substitution
 		code = template.substitute(
-		            _TRACE1 = "node.warn" if self.trace & 1 else "#",
-		            _TRACE2 = "node.warn" if self.trace & 2 else "#",
-		            _pd_score_thresh = self.pd_score_thresh,
-		            _lm_score_thresh = self.lm_score_thresh,
-		            _pad_h = self.pad_h,
-		            _img_h = self.img_h,
-		            _img_w = self.img_w,
-		            _frame_size = self.frame_size,
-		            _crop_w = self.crop_w,
-		            _IF_XYZ = "" if self.xyz else '"""',
-		            _IF_USE_HANDEDNESS_AVERAGE = "" if self.use_handedness_average else '"""',
-		            _single_hand_tolerance_thresh = self.single_hand_tolerance_thresh,
-		            _IF_USE_SAME_IMAGE = "" if self.use_same_image else '"""',
-		            _IF_USE_WORLD_LANDMARKS = "" if self.use_world_landmarks else '"""',
+			_TRACE1 = "node.warn" if self.trace & 1 else "#",
+			_TRACE2 = "node.warn" if self.trace & 2 else "#",
+			_pd_score_thresh = self.pd_score_thresh,
+			_lm_score_thresh = self.lm_score_thresh,
+			_pad_h = self.pad_h,
+			_img_h = self.img_h,
+			_img_w = self.img_w,
+			_frame_size = self.frame_size,
+			_crop_w = self.crop_w,
+			_IF_XYZ = "" if self.xyz else '"""',
+			_IF_USE_HANDEDNESS_AVERAGE = "" if self.use_handedness_average else '"""',
+			_single_hand_tolerance_thresh = self.single_hand_tolerance_thresh,
+			_IF_USE_SAME_IMAGE = "" if self.use_same_image else '"""',
+			_IF_USE_WORLD_LANDMARKS = "" if self.use_world_landmarks else '"""',
 		)
-		
+
 		# Remove comments and empty lines
 		code = re.sub(r'"{3}.*?"{3}', '', code, flags=re.DOTALL)
 		code = re.sub(r'#.*', '', code)
 		code = re.sub('\n\s*\n', '\n', code)
-		
+
 		# For debugging
 		if self.trace & 8:
 			with open("tmp_code.py", "w") as file:
@@ -362,7 +344,9 @@ class CustomPipeline:
     # ------------------------------------------------------------------------------------------------------------------
 
 	def getNeuralNetwork(self):
-		'''Define Script Folder Path and Get Blob files from Trained Neural Network'''
+		'''
+		Define the script folder path and get .blob files of trained Neural Networks.
+		'''
 		SCRIPT_DIR = "/home/ema/Desktop/depthai-hand-segmentation"
 
 		PALM_DETECTION_MODEL = str(SCRIPT_DIR + "/models/palm_detection_sh4.blob")
@@ -398,14 +382,18 @@ class CustomPipeline:
 	# ------------------------------------------------------------------------------------------------------------------
 
 	def getFrame(self):
-		'''If RGB queue empty, this function returns None'''
+		'''
+		If RGB queue empty, this function returns None.
+		'''
 		frame_msg = self.cam_video_preview.get()
 
 		return frame_msg.getCvFrame() if frame_msg is not None else None
 	# ------------------------------------------------------------------------------------------------------------------
 
 	def getDepthFrame(self):
-		'''If depth queue empty, this function returns None'''
+		'''
+		If depth queue is empty, this function returns None.
+		'''
 		depth_msg = self.stereo_queue.get() # depth frame returns values in mm (millimeter)
 
 		return depth_msg.getFrame() if depth_msg is not None else None
