@@ -16,15 +16,6 @@ class HostSpatialsCalc:
         self.DELTA = 5  # Take 10x10 depth pixels around point for depth averaging
         self.THRESH_LOW = 200 # 20 cm
         self.THRESH_HIGH = 1500 # 1.5 m
-        self.HFOV = self.calibData.getFov(dai.CameraBoardSocket.CAM_A) # Horizontal field of view of the camera
-    # --------------------------------------------------------------------------------------------
-
-    def setLowerThreshold(self, threshold_low):
-        self.THRESH_LOW = threshold_low
-    # --------------------------------------------------------------------------------------------
-
-    def setUpperThreshold(self, threshold_low):
-        self.THRESH_HIGH = threshold_low
     # --------------------------------------------------------------------------------------------
 
     def setDeltaRoi(self, delta):
@@ -75,7 +66,8 @@ class HostSpatialsCalc:
         angle_x = self._calc_angle(depth_frame, bb_x_pos, self.HFOV)
         angle_y = self._calc_angle(depth_frame, bb_y_pos, self.HFOV)
 
-        spatials = np.array([averageDepth, averageDepth * math.tan(angle_x), -averageDepth * math.tan(angle_y)])
+        # spatials = np.array([averageDepth, averageDepth * math.tan(angle_x), -averageDepth * math.tan(angle_y)])
+        spatials = np.array([averageDepth * math.tan(angle_x), -averageDepth * math.tan(angle_y), averageDepth])
 
         return spatials, centroid
     # --------------------------------------------------------------------------------------------
@@ -84,7 +76,6 @@ class HostSpatialsCalc:
         '''
         Calculate spatial coordinates for an arbitrary region of interest (ROI) defined by a set of pixels in the depth frame.
         '''
-
         # Check if data is there
         if depth_frame is None or roi_pixels is None or len(roi_pixels)==0:
             return None, None
@@ -125,11 +116,10 @@ class HostSpatialsCalc:
         return spatials, centroid
     # --------------------------------------------------------------------------------------------
 
-    def calc_roi_each_point_spatials(self, depth_frame, roi_pixels, down_sampling=1, averaging_method = np.mean):
+    def calc_roi_each_point_spatials(self, depth_frame, depth_data, roi_pixels, down_sampling=1, averaging_method = np.mean):
         '''
         Calculate spatial coordinates for each point in an ROI with optional down-sampling
         '''
-
         if depth_frame is None or roi_pixels is None or len(roi_pixels)==0:
             return None, None
 
@@ -139,23 +129,6 @@ class HostSpatialsCalc:
 
         # Extract depth values at the ROI pixels
         roi_depth_values = depth_frame_c[roi_pixels_c[:,0], roi_pixels_c[:,1]]
-
-        # Remove background noise and outliers
-        obj_depth = np.quantile(roi_depth_values, 0.7)
-        roi_depth_values2_index = np.argwhere(roi_depth_values < obj_depth + 5).reshape(-1)
-
-        if roi_depth_values2_index.size < 1:
-            return None, None
-
-        roi_depth_values2 = roi_depth_values[roi_depth_values2_index]
-        roi_pixels_2 = roi_pixels_c[roi_depth_values2_index,:]
-        roi_depth_values2_index = np.argwhere(roi_depth_values2 > obj_depth - 5).reshape(-1)
-
-        if roi_depth_values2_index.size < 1:
-            return None, None
-
-        roi_depth_values = roi_depth_values2[roi_depth_values2_index]
-        roi_pixels_c = roi_pixels_2[roi_depth_values2_index,:]
 
         # Remove invalid and out-of-range depth values
         roi_depth_values_valid, roi_pixels_in_range_valid = self.remove_nan_and_out_of_range_points(roi_depth_values, roi_pixels_c)
@@ -181,10 +154,12 @@ class HostSpatialsCalc:
         # Calculate angles for each ROI pixel
         x_angle_tan_arr = np.zeros(len(x_pos_arr))
         y_angle_tan_arr = np.zeros(len(y_pos_arr))
-        
+
+        HFOV = np.deg2rad(self.calibData.getFov(dai.CameraBoardSocket(depth_data.getInstanceNum()), useSpec=False))
+
         for i in range(len(y_angle_tan_arr)):
-            x_angle_tan_arr[i] = math.tan(self._calc_angle(depth_frame, x_pos_arr[i], self.HFOV))
-            y_angle_tan_arr[i] = math.tan(self._calc_angle(depth_frame, y_pos_arr[i], self.HFOV))
+            x_angle_tan_arr[i] = math.tan(self._calc_angle(depth_frame, x_pos_arr[i], HFOV))
+            y_angle_tan_arr[i] = math.tan(self._calc_angle(depth_frame, y_pos_arr[i], HFOV))
 
         # Calculate spatial coordinates for each ROI pixel
         spatials = np.zeros([len(x_angle_tan_arr), 3])

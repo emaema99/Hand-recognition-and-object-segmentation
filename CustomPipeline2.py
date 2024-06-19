@@ -204,7 +204,7 @@ class CustomPipeline:
 		right.setFps(self.internal_fps)
 
 		stereo.setDefaultProfilePreset(dai.node.StereoDepth.PresetMode.HIGH_DENSITY)
-		stereo.setConfidenceThreshold(150)
+		stereo.setConfidenceThreshold(200)
 		stereo.setLeftRightCheck(True) # LR-check is required for depth alignment
 		stereo.setDepthAlign(dai.CameraBoardSocket.CAM_A)
 		stereo.setSubpixel(False) # SubPixel=True brings latency
@@ -397,6 +397,10 @@ class CustomPipeline:
 		depth_msg = self.stereo_queue.get() # depth frame returns values in mm (millimeter)
 
 		return depth_msg.getFrame() if depth_msg is not None else None
+	# ------------------------------------------------------------------------------------------------------------------
+
+	def getDepthData(self):
+		return self.stereo_queue.get()
 	# ------------------------------------------------------------------------------------------------------------------
 
 	def getManagerScriptOutput(self):

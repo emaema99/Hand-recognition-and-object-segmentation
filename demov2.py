@@ -130,7 +130,8 @@ if __name__ == '__main__':
         while True:
             # Capture depth and RGB frame from the camera pipeline.
             frame = pipeline.getFrame()
-            depth_frame = pipeline.getDepthFrame()
+            depth_frame = pipeline.getDepthFrame() # UINT16 - mm
+            depth_data = pipeline.getDepthData() # used to retrieve HFOV info
 
             if first_frame:
                 # Sets the grid dimensions, depending on the frame shape.
@@ -141,8 +142,7 @@ if __name__ == '__main__':
                 cell_height = grid_height // 2
                 cell_width = grid_width // 3
 
-                # This "first frame" condition ensures the correct visualization 
-                # (otherwise we can't see anything: conda environment problem related for my PC).
+                # This "first frame" condition ensures the correct visualization (otherwise we can't see anything: conda environment problem related to my PC).
                 grid_img = add_grid_img("Not Grasping", "-", "-", "0", grid_height, grid_width, cell_height, cell_width)
                 combined_img = np.vstack((frame, grid_img))
 
@@ -182,23 +182,17 @@ if __name__ == '__main__':
             result_class_list = copy.deepcopy(my_seg8.get_result_class_list())
 
             if annotated_frame is not None:
-                # annotated_frame = copy.deepcopy(frame)
                 # Calculate FPS.
                 start_time, frame_count, fps = calc_fps(start_time, frame_count, fps)
 
                 for i in range(len(masks_indices)):
                     # Calculate spatial data for each mask
-                    # mask_spatial, centroid = spatial_calc.calc_roi_spatials(depth_frame, masks_indices[i])
-                    # mask_spatial, roi_pixels_in_range_downsampled = spatial_calc.calc_roi_each_point_spatials(depth_frame, masks_indices[i], down_sampling)
-                    mask_spatial = spatial_calc.calc_roi_each_point_spatials(depth_frame, masks_indices[i], down_sampling)
+                    mask_spatial = spatial_calc.calc_roi_each_point_spatials(depth_frame, depth_data, masks_indices[i], down_sampling)
 
                     if isinstance(mask_spatial, np.ndarray):
                         mask_spatial = mask_spatial.reshape(-1,3)
 
                     masks_spatial.append(mask_spatial)
-                    # if roi_pixels_in_range_downsampled is not None:
-                    #     print("ciao")
-                    #     annotated_frame = draw_mask(annotated_frame, roi_pixels_in_range_downsampled, result_class_list[i])
 
                 # Process hand data (if available and if a hand was detected)
                 if handsData and hand_spatial is not None:
@@ -207,7 +201,6 @@ if __name__ == '__main__':
                             min_dist = np.inf
                             min_dist_index = None
                             min_index = None
-
                             for i in range(len(masks_spatial)):
                                 if masks_spatial[i] is not None and isinstance(masks_spatial[i], np.ndarray):
                                     hand_spatial_matr = np.full(masks_spatial[i].shape, hand_spatial)
