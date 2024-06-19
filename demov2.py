@@ -121,6 +121,8 @@ if __name__ == '__main__':
     released = True
     moving_avarage_index = 0
 
+    depth_data = pipeline.getDepthData() # used to retrieve HFOV info
+
     # Initialize communication with the exosuit (if enabled).
     if EXO_COMM:
         communicator = ArduinoCommunicator(ip='192.168.0.21', port=50000)
@@ -131,7 +133,6 @@ if __name__ == '__main__':
             # Capture depth and RGB frame from the camera pipeline.
             frame = pipeline.getFrame()
             depth_frame = pipeline.getDepthFrame() # UINT16 - mm
-            depth_data = pipeline.getDepthData() # used to retrieve HFOV info
 
             if first_frame:
                 # Sets the grid dimensions, depending on the frame shape.
