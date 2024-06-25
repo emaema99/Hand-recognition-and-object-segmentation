@@ -33,13 +33,12 @@ class Seg8:
 		self.__annotated_frame = None
 		self.__annotated_frame_ready = False
 		self.__obj_masks_indices = []
-		# self.__obj_masks_distance = []
 		self.__inference_class_list = []
 		self.__stop = False
 
 		# Threads for YOLO
-		self.__yolo_thread = threading.Thread(target=self.__yolo_predict)
-		self.__post_processing_thread = threading.Thread(target=self.__post_processing)
+		self.__yolo_thread = threading.Thread(target = self.__yolo_predict)
+		self.__post_processing_thread = threading.Thread(target = self.__post_processing)
 	# ---------------------------------------------------------------------------------------------------
 
 	def __del__(self):
@@ -67,7 +66,6 @@ class Seg8:
 		self.__annotated_frame = None
 		self.__annotated_frame_ready = False
 		self.__obj_masks_indices = []
-		# self.__obj_masks_distance = []
 		self.__inference_class_list = []
 		self.__stop = False
 
@@ -87,11 +85,10 @@ class Seg8:
 		YOLO result prediction thread method
 		'''
 		model = YOLO(self.__path_to_yolo, verbose=False)
-		
+
 		# Wait until a frame is available or stop signal is received
 		while self.__frame is None and not self.__stop:
 			time.sleep(0.1)
-
 
 		# Continuous prediction loop
 		while not self.__stop:
@@ -107,6 +104,7 @@ class Seg8:
 	def get_yolo_seg_result(self):
 		while not self.__new_result_ready and not self.__stop:
 			time.sleep(0.002)
+
 		return self.__seg8_result
 	# ---------------------------------------------------------------------------------------------------
 
@@ -124,6 +122,7 @@ class Seg8:
 	def get_seg_post_processing(self):
 		while not self.__annotated_frame_ready and not self.__stop:
 			time.sleep(0.002)
+
 		return self.__annotated_frame, self.__obj_masks_indices, self.__inference_class_list
 	# ---------------------------------------------------------------------------------------------------
 
@@ -146,9 +145,7 @@ class Seg8:
 				self.__start_post_processing = False
 				img = np.copy(self.__frame_to_post_proc)
 				frame_to_annotate = np.copy(img)
-				# depth_frame_to_anotate = np.copy(self.__depth_frame)
 				obj_masks_indices = []
-				# obj_masks_distance = []
 				i = 0
 
 				if self.__result_to_post_proc.masks is not None:
@@ -174,18 +171,13 @@ class Seg8:
 								mask_color = [0.5, 0.5, 1]
 
 							frame_to_annotate[mask_indices[:,0], mask_indices[:,1], :] = img[mask_indices[:,0], mask_indices[:,1], :] * mask_color
-							
-							# # Calculate the object's distance using the depth frame
-							# obj_distance = np.quantile(depth_frame_to_anotate[mask_indices[:,0], mask_indices[:,1]], 0.8)
 
 							obj_masks_indices.append([mask_indices])
-							# obj_masks_distance.append([obj_distance])
 
 							i = i + 1
 
 				self.__annotated_frame = copy.deepcopy(frame_to_annotate)
 				self.__obj_masks_indices = copy.deepcopy(obj_masks_indices)
-				# self.__obj_masks_distance = copy.deepcopy(obj_masks_distance)
 
 				if self.__result_to_post_proc is not None and self.__result_to_post_proc.boxes is not None:
 					self.__inference_class_list = [int(cls) for cls in self.__result_to_post_proc.boxes.cls.tolist()]
@@ -238,13 +230,6 @@ class Seg8:
 		Method to retrieve object mask indices
 		'''
 		return self.__obj_masks_indices
-	# ---------------------------------------------------------------------------------------------------
-
-	# def get_obj_masks_distance(self):
-	# 	'''
-	# 	Method to retrieve object mask distances
-	# 	'''
-	# 	return self.__obj_masks_distance
 	# ---------------------------------------------------------------------------------------------------
 
 	def update(self, frame, depth_frame):

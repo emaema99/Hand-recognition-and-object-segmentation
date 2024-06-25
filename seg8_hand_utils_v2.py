@@ -7,16 +7,24 @@ import depthai as dai
 class HostSpatialsCalc:
     '''
     Class for calculating the spatial coordinates for a ROI.
+    Adapted from https://github.com/luxonis/depthai-experiments/blob/master/gen2-calc-spatials-on-host/calc.py
     '''
     def __init__(self, device, depth_data):
         # Initialize the class with device calibration data.
+        # Required information for calculating spatial coordinates on the host
+        # self.monoHFOV = np.deg2rad(calibData.getFov(dai.CameraBoardSocket.LEFT))
+        # the FOV of color camera is measured for the full resolution, 4056x3040, 
+        # so would need to scale back accordingly if 4k/1080p is selected.
+        # 4k is 3840x2160 central crop of 4056x3040, so there is a HFOV loss,  
+        # so HFOV will be scaled back by 3840/4056. 1080p has the same FOV as 4k (it's 4k downscaled/binned).
         self.calibData = device.readCalibration()
-        self.HFOV = np.deg2rad(self.calibData.getFov(dai.CameraBoardSocket(depth_data.getInstanceNum()), useSpec=False))
+        # self.HFOV = np.deg2rad(self.calibData.getFov(dai.CameraBoardSocket(depth_data.getInstanceNum()), useSpec=False))
+        self.HFOV = np.deg2rad(self.calibData.getFov(dai.CameraBoardSocket.RGB)) * 3840 / 4056
 
         # Constants for depth processing
         self.DELTA = 5  # Take 10x10 depth pixels around point for depth averaging
         self.THRESH_LOW = 200 # 20 cm
-        self.THRESH_HIGH = 1500 # 1.5 m
+        self.THRESH_HIGH = 2000 # 2 m
     # --------------------------------------------------------------------------------------------
 
     def setDeltaRoi(self, delta):
@@ -166,7 +174,7 @@ class HostSpatialsCalc:
         spatials[:,1] = (roi_depth_values_downsampled * y_angle_tan_arr) * (-1)
         spatials[:,2] = roi_depth_values_downsampled
 
-        return spatials
+        return spatials, roi_pixels_in_range_downsampled
     # --------------------------------------------------------------------------------------------
 
     def _calc_angle(self, frame, offset):

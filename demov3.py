@@ -94,17 +94,19 @@ def draw_mask(frame_to_annotate, mask, class_type):
 
     return annotated_frame
 
-def calc_distances(masks_indices, depth_frame, hand_spatial):
-    if len(masks_indices) > 0 or hand_spatial is not None:
+def calc_distances(masks_pixels, depth_frame, hand_spatial):
+    if len(masks_pixels) > 0 or hand_spatial is not None:
         masks_spatial = []
-        for i in range(len(masks_indices)):
+        masks_pixels_in_range = []
+        for i in range(len(masks_pixels)):
             # Calculate spatial data for each mask
-            mask_spatial = spatial_calc.calc_roi_each_point_spatials(depth_frame, masks_indices[i], down_sampling)
+            mask_spatial, mask_pixels_in_range = spatial_calc.calc_roi_each_point_spatials(depth_frame, masks_pixels[i], down_sampling)
 
             if isinstance(mask_spatial, np.ndarray):
                 mask_spatial = mask_spatial.reshape(-1,3)
 
             masks_spatial.append(mask_spatial)
+            masks_pixels_in_range.append(mask_pixels_in_range)
 
         # Process hand data (if available and if a hand was detected)
         if grasping_status and hand_spatial is not None:
@@ -123,12 +125,17 @@ def calc_distances(masks_indices, depth_frame, hand_spatial):
                             min_index = copy.deepcopy(i)
                             mask_min_dist_index = np.argmin(dists)
                             min_dist_index = copy.deepcopy(mask_min_dist_index)
+                
+                # Debugging
+                print(f"Hand spatial: {hand_spatial}")
+                print(f"Masks spatial: {masks_spatial[min_index][mask_min_dist_index]}")
+                print(f"pixel coord: ", masks_pixels_in_range[min_index][mask_min_dist_index])
+                print(f"Min dist: {min_dist} at index: {min_dist_index}")
 
                 if min_index is not None and min_dist_index is not None:
                     return min_index, masks_spatial[min_index][min_dist_index,:], min_dist
 
     return None, [np.nan, np.nan, np.nan], None
-            
 
 if __name__ == '__main__':
     '''
@@ -170,9 +177,8 @@ if __name__ == '__main__':
         first_depth_frame = pipeline.getDepthFrame() # UINT16 - mm
 
         while first_frame is None or first_depth_frame is None:
-            # Capture depth and RGB frame from the camera pipeline.
             first_frame = pipeline.getFrame()
-            first_depth_frame = pipeline.getDepthFrame() # UINT16 - mm
+            first_depth_frame = pipeline.getDepthFrame()
             time.sleep(0.1)
 
         # Sets the grid and cells dimensions, depending on the frame shape.
@@ -190,37 +196,35 @@ if __name__ == '__main__':
         cv2.resizeWindow('Object segmentation & grasping detection', 1280, 720)
         cv2.waitKey(1)
 
-        # salvo il current frame come frame (i - 2)
+        # Save current frame as (i-2)th frame
         frame_i_2 = np.copy(first_frame)
         depth_frame_i_2 = np.copy(first_depth_frame)
 
-        # do primo frame a seg8 (i - 2)
+        # Send the (i-2)th frame to the Seg8
         my_seg8.set_frame_to_seg(frame_i_2)
-        handsData_i_2 = handTracker.getHandsData(pipeline.getManagerScriptOutput()) # frame i - 2
+        handsData_i_2 = handTracker.getHandsData(pipeline.getManagerScriptOutput()) # frame (i-2)th
 
-        # prendo un nuovo frame e lo salvo il frame come (i - 1)
+        # Take next frame and save it as (i-1)th frame
         frame_i_1 = np.copy(pipeline.getFrame())
         depth_frame_i_1 = np.copy(pipeline.getDepthFrame())
 
-        # attendo che la yolov8 finito l'elaborazione
-        result_i_2 = my_seg8.get_yolo_seg_result() # blocking
+        # Wait for YOLOv8-seg to generate results
+        result_i_2 = my_seg8.get_yolo_seg_result() # blocking behaviour
 
-        # do secondo frame a seg8 (i - 1)
+        # Send (i-1)th frame to Seg8
         my_seg8.set_frame_to_seg(frame_i_1)
-        handsData_i_1 = handTracker.getHandsData(pipeline.getManagerScriptOutput()) # frame i - 1
+        handsData_i_1 = handTracker.getHandsData(pipeline.getManagerScriptOutput()) # frame (i-1)th
 
-        # do a seg8_post_proc il frame (i - 2)
+        # Start post processing on (i-2)th frame
         my_seg8.start_seg_post_processing(frame_i_2, result_i_2)
-        # e' in preparazione postprocessing della maschera che sara' pronto al frame (i - 2)
-
-
+        # Preparing the post processing of the mask that will be ready at (i-2)th frame
 
         while True:
-            # Capture depth and RGB frame from the camera pipeline.
-            frame_i = pipeline.getFrame() # i, blocking (15fps)
+            # Capture depth and RGB (i)th frame from the camera pipeline
+            frame_i = pipeline.getFrame() # blocking (15fps)
             depth_frame_i = pipeline.getDepthFrame()
 
-            # Initialization of variables for frame annotation.
+            # Initialization of variables for frame annotation
             frame_final = np.copy(frame_i_2)
             obj_spatial = None
             hand = None
@@ -230,24 +234,28 @@ if __name__ == '__main__':
             grasped_obj_name = "-"
             hand_obj_dist = "-"
 
-            # prendere dati di yolov8 al frame (i - 1)
+            # Take results from Seg8 at (i-1)th frame
             result_i_1 = my_seg8.get_yolo_seg_result() # blocking
-            my_seg8.set_frame_to_seg(frame_i) # update frame i, non blocking
+
+            # Send (i)th frame to Seg8
+            my_seg8.set_frame_to_seg(frame_i) # update (i)th frame, non-blocking
 
             # Perform hand tracker inference
-            handsData_i = handTracker.getHandsData(pipeline.getManagerScriptOutput()) # frame i
+            handsData_i = handTracker.getHandsData(pipeline.getManagerScriptOutput()) # (i)th frame
 
             if handsData_i_2:
                 hand = copy.deepcopy(handsData_i_2[0])
                 grasping_status = hand.is_grasping
                 hand_spatial = hand.xyz
 
-            # Prendere post_processing frame i - 2
-            annotated_frame_i_2, masks_indices_i_2, inference_class_list_i_2 = copy.deepcopy(my_seg8.get_seg_post_processing()) # bloccante
+            # Take (i-2)th post-processed frame
+            annotated_frame_i_2, masks_indices_i_2, inference_class_list_i_2 = copy.deepcopy(my_seg8.get_seg_post_processing()) # blocking
 
+            # Start post processing on (i-1)th frame
             my_seg8.start_seg_post_processing(frame_i_1, result_i_1)
 
-            # Calcolo distanza mano obj del frame i - 2
+            # Calculates distance from the palm of the hand to the closest pixel of the object mask in (i-2)th frame
+            # TODO: FIX IT!
             if handsData_i_2 and hand_spatial is not None:
                 if grasping_status:
                     if len(masks_indices_i_2) > 0:
@@ -257,11 +265,11 @@ if __name__ == '__main__':
                             obj_weight = my_seg8.get_class_weight()[inference_class_list_i_2[selected_index]]
                             hand_obj_dist = int(selected_dist)
 
-                            # Update moving average arrays with current data.
+                            # Update moving average arrays with current data
                             hand_spatial_arr[moving_avarage_index, :] = hand_spatial
                             obj_spatial_arr[moving_avarage_index, :] = selected_obj_spatial
 
-                            # Calculate averages for grasping decision.
+                            # Dealing with NaN values
                             hand_spatial_arr_without_nan_index = np.argwhere(~np.isnan(hand_spatial_arr)).reshape(-1)
 
                             if hand_spatial_arr_without_nan_index.shape[0] > 0:
@@ -270,12 +278,12 @@ if __name__ == '__main__':
 
                             obj_spatial_arr_without_nan_index = np.argwhere(~np.isnan(obj_spatial_arr)).reshape(-1)
 
-                            # Deals with NaN values.
                             if obj_spatial_arr_without_nan_index.shape[0] > 0:
                                 obj_spatial_arr_without_nan = obj_spatial_arr[obj_spatial_arr_without_nan_index]
                                 obj_spatial_avarage = np.mean(obj_spatial_arr_without_nan, axis=0)
 
-                            hand_obj_dist = np.linalg.norm(hand_spatial_avarage-obj_spatial_avarage)
+                            # Calculates the 3D norm (spatial distance) between hand and object
+                            hand_obj_dist = np.linalg.norm(hand_spatial_avarage - obj_spatial_avarage)
                             print("hand_obj_dist: ", hand_obj_dist)
 
                             if hand_obj_dist < hand_obj_dist_threshold:
@@ -283,33 +291,32 @@ if __name__ == '__main__':
                             else:
                                 grasping_status_arr[moving_avarage_index] = False
 
-                            # Update moving average index.
+                            # Update moving average index
                             moving_avarage_index = (moving_avarage_index + 1) % num_elements_moving_avarage
                 else:
-                    # Handle case when hand is not grasping.
+                    # Handle case when the hand is not grasping
                     grasping_status_arr[moving_avarage_index] = False
                     hand_spatial_arr[moving_avarage_index, :] = [np.nan, np.nan, np.nan]
                     obj_spatial_arr[moving_avarage_index, :] = [np.nan, np.nan, np.nan]
                 
-                    # Update moving average index.
+                    # Update moving average index
                     moving_avarage_index = (moving_avarage_index + 1) % num_elements_moving_avarage
 
             start_time, frame_count, fps = calc_fps(start_time, frame_count, fps)
 
-            # Draw hand annotations on the frame.
+            # Draw hand annotations on the frame
             frame_final = handRender.draw(annotated_frame_i_2, handsData_i_2)
 
-            # Calculate the moving average grasping status.
+            # Calculate the moving average grasping status
             if np.sum(grasping_status_arr) > num_elements_moving_avarage/2:
                 if released:
                     last_grasped_obj_name = grasped_obj_name
                     last_obj_weight = obj_weight
-                    # If the communication is ON, sends the weight to the exosuit.
+                    # If the communication is ON, sends the weight to the exosuit
                     if EXO_COMM:
                         communicator.send_weight(copy.deepcopy(obj_weight))
                 released = False
                 grasping_status_avarage = True
-
             else:
                 if EXO_COMM:
                     communicator.send_weight(0)
@@ -318,28 +325,25 @@ if __name__ == '__main__':
                 last_obj_weight = "-"
                 grasping_status_avarage = False 
 
-            # Update the grid image with current status.
+            # Update the grid image with current status
             grid_img = add_grid_img2(grasping_status_avarage, last_grasped_obj_name, last_obj_weight, fps, grid_height, grid_width, cell_height, cell_width)
 
-            # Stack the main frame and the grid image vertically.
+            # Stack the main frame and the grid image vertically
             combined_img = np.vstack((frame_final, grid_img))
 
             cv2.namedWindow('Object segmentation & grasping detection', cv2.WINDOW_KEEPRATIO)
             cv2.imshow('Object segmentation & grasping detection', combined_img)
             cv2.resizeWindow('Object segmentation & grasping detection', 1280, 720)
 
-            # Aggiornare i frame
-            # frame i -1 -> frame i - 2
+            # Update frames
+            # frame (i-1) -> frame (i-2)
             frame_i_2 = np.copy(frame_i_1)
             depth_frame_i_2 = np.copy(depth_frame_i_1)
             handsData_i_2 = copy.deepcopy(handsData_i_1)
-
-            # frame i -> frame i - 1
+            # frame (i) -> frame (i-1)
             frame_i_1 = np.copy(frame_i)
             depth_frame_i_1 = np.copy(depth_frame_i)
             handsData_i_1 = copy.deepcopy(handsData_i)
-
-            # Calculate FPS
 
             # Break the loop if 'q' key is pressed
             if cv2.waitKey(10) == ord('q'):
