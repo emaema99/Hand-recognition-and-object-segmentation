@@ -164,7 +164,9 @@ def generate_anchors(options):
 # -------------------------------------------------------------------------------------------------------------
 
 def generate_handtracker_anchors(input_size_width, input_size_height):
-    ''' https://github.com/google/mediapipe/blob/master/mediapipe/modules/palm_detection/palm_detection_cpu.pbtxt'''
+    '''
+    https://github.com/google/mediapipe/blob/master/mediapipe/modules/palm_detection/palm_detection_cpu.pbtxt
+    '''
     anchor_options = SSDAnchorOptions(
         num_layers = 4,
         min_scale = 0.1484375,
@@ -300,7 +302,6 @@ if  v0 > 4 or (v0 == 4 and (v1 > 5 or (v1 == 5 and v2 >= 4))):
         # cv2.dnn.NMSBoxes(boxes, scores, 0, nms_thresh) needs:
         # boxes = [ [x, y, w, h], ...] with x, y, w, h of type int
         # Currently, x, y, w, h are float between 0 and 1, so we arbitrarily multiply by 1000 and cast to int
-        # boxes = [r.box for r in regions]
         boxes = [ [int(x*1000) for x in r.pd_box] for r in regions]        
         scores = [r.pd_score for r in regions]
         indices = cv2.dnn.NMSBoxes(boxes, scores, 0, nms_thresh) # Not using top_k=2 here because it does not give expected result. Bug ?
@@ -323,7 +324,8 @@ def rot_vec(vec, rotation):
 # -------------------------------------------------------------------------------------------------------------
 
 def detections_to_rect(regions):
-    '''https://github.com/google/mediapipe/blob/master/mediapipe/modules/hand_landmark/palm_detection_detection_to_roi.pbtxt
+    '''
+    https://github.com/google/mediapipe/blob/master/mediapipe/modules/hand_landmark/palm_detection_detection_to_roi.pbtxt
     Converts results of palm detection into a rectangle (normalized by image size)
     that encloses the palm and is rotated such that the line connecting center of
     the wrist and MCP of the middle finger is aligned with the Y-axis of the rectangle:
@@ -341,7 +343,6 @@ def detections_to_rect(regions):
         }
       }
     '''
-    
     target_angle = pi * 0.5 # 90 = pi/2
 
     for region in regions:
@@ -472,8 +473,10 @@ def distance(a, b):
 # -------------------------------------------------------------------------------------------------------------
 
 def angle(a, b, c):
-    '''https://stackoverflow.com/questions/35176451/python-code-to-calculate-angle-between-three-point-using-their-3d-coordinates.
-    a, b and c : points as np.array([x, y, z])''' 
+    '''
+    https://stackoverflow.com/questions/35176451/python-code-to-calculate-angle-between-three-point-using-their-3d-coordinates.
+    a, b and c : points as np.array([x, y, z])
+    ''' 
     ba = a - b
     bc = c - b
     cosine_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc))
