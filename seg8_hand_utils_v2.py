@@ -165,9 +165,14 @@ class HostSpatialsCalc:
         x_angle_tan_arr = np.zeros(len(x_pos_arr))
         y_angle_tan_arr = np.zeros(len(y_pos_arr))
 
-        for i in range(len(y_angle_tan_arr)):
-            x_angle_tan_arr[i] = math.tan(self._calc_angle(depth_frame, x_pos_arr[i]))
-            y_angle_tan_arr[i] = math.tan(self._calc_angle(depth_frame, y_pos_arr[i]))
+        # calc angle tan
+        value = math.tan(self.HFOV / 2.0) / (depth_frame.shape[1] / 2.0)
+        x_angle_tan_arr = x_pos_arr * value
+        y_angle_tan_arr = y_pos_arr * value
+
+        # for i in range(len(y_angle_tan_arr)):
+        #     x_angle_tan_arr[i] = math.tan(self._calc_angle(depth_frame, x_pos_arr[i]))
+        #     y_angle_tan_arr[i] = math.tan(self._calc_angle(depth_frame, y_pos_arr[i]))
 
         # Calculate spatial coordinates for each ROI pixel
         spatials = np.zeros([len(x_angle_tan_arr), 3])
