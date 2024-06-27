@@ -18,10 +18,12 @@ Based on https://github.com/geaxgx/depthai_hand_tracker and on the works of Ultr
 '''
 
 path_to_yolo = "/home/ema/Desktop/depthai-hand-segmentation/models/best_nano8.pt"
+camera_fps = 15
 num_elements_moving_avarage = 15
-hand_obj_dist_threshold = 250 #[mm]
+hand_obj_dist_threshold = 60 #[mm]
 down_sampling = 5
 
+DISPLAY = True
 EXO_COMM = False
 
 def add_grid_img(gesture_status, object_name, object_weight, fps, grid_height, grid_width, cell_height, cell_width):
@@ -125,12 +127,6 @@ def calc_distances(masks_pixels, depth_frame, hand_spatial):
                             min_index = copy.deepcopy(i)
                             mask_min_dist_index = np.argmin(dists)
                             min_dist_index = copy.deepcopy(mask_min_dist_index)
-                
-                # Debugging
-                print(f"Hand spatial: {hand_spatial}")
-                print(f"Masks spatial: {masks_spatial[min_index][mask_min_dist_index]}")
-                print(f"pixel coord: ", masks_pixels_in_range[min_index][mask_min_dist_index])
-                print(f"Min dist: {min_dist} at index: {min_dist_index}")
 
                 if min_index is not None and min_dist_index is not None:
                     return min_index, masks_spatial[min_index][min_dist_index,:], min_dist
@@ -142,14 +138,14 @@ if __name__ == '__main__':
     Initialize the pipeline (while setting the thresholds for the palm detection and landmark detection algorithms),
     the hand tracker (with frame size and padding parameters from the pipeline) and the hand tracker renderer
     '''
-    pipeline = CustomPipeline(pd_score_thresh = 0.4, lm_score_thresh = 0.4)
+    pipeline = CustomPipeline(pd_score_thresh = 0.4, lm_score_thresh = 0.4, internal_fps = camera_fps)
     handTracker = HandTracker(pipeline.frame_size, pipeline.pad_h, pipeline.pad_w, pipeline.lm_score_thresh)
     handRender = HandTrackerRenderer(handTracker)
     depth_data = pipeline.getDepthData() # used to retrieve HFOV info
     spatial_calc = HostSpatialsCalc(pipeline.getDevice(), depth_data)
 
     # Initialize and start the YOLO segmentation model
-    my_seg8 = Seg8(path_to_yolo)
+    my_seg8 = Seg8(path_to_yolo, DISPLAY)
     my_seg8.start_threads()
 
     # Initialize variables for frame processing and FPS calculation
@@ -191,32 +187,34 @@ if __name__ == '__main__':
         combined_img = np.vstack((first_frame, grid_img))
 
         # Here the frame is resized for better visualization, while mantaining the ratio.
-        cv2.namedWindow('Object segmentation & grasping detection', cv2.WINDOW_KEEPRATIO)
-        cv2.imshow('Object segmentation & grasping detection', combined_img)
-        cv2.resizeWindow('Object segmentation & grasping detection', 1280, 720)
-        cv2.waitKey(1)
+        if DISPLAY:
+            cv2.namedWindow('Object segmentation & grasping detection', cv2.WINDOW_KEEPRATIO)
+            cv2.imshow('Object segmentation & grasping detection', combined_img)
+            cv2.resizeWindow('Object segmentation & grasping detection', 1280, 720)
+            cv2.waitKey(1)
 
         # Save current frame as (i-2)th frame
-        frame_i_2 = np.copy(first_frame)
-        depth_frame_i_2 = np.copy(first_depth_frame)
+        frame_i_2 = copy.deepcopy(first_frame)
+        depth_frame_i_2 = copy.deepcopy(first_depth_frame)
 
         # Send the (i-2)th frame to the Seg8
         my_seg8.set_frame_to_seg(frame_i_2)
-        handsData_i_2 = handTracker.getHandsData(pipeline.getManagerScriptOutput()) # frame (i-2)th
+        handsData_i_2 = copy.deepcopy(handTracker.getHandsData(pipeline.getManagerScriptOutput())) # frame (i-2)th
 
         # Take next frame and save it as (i-1)th frame
-        frame_i_1 = np.copy(pipeline.getFrame())
-        depth_frame_i_1 = np.copy(pipeline.getDepthFrame())
+        frame_i_1 = copy.deepcopy(pipeline.getFrame())
+        depth_frame_i_1 = copy.deepcopy(pipeline.getDepthFrame())
 
         # Wait for YOLOv8-seg to generate results
-        result_i_2 = my_seg8.get_yolo_seg_result() # blocking behaviour
+        result_i_2 = copy.deepcopy(my_seg8.get_yolo_seg_result()) # blocking behaviour
 
         # Send (i-1)th frame to Seg8
         my_seg8.set_frame_to_seg(frame_i_1)
-        handsData_i_1 = handTracker.getHandsData(pipeline.getManagerScriptOutput()) # frame (i-1)th
+        handsData_i_1 = copy.deepcopy(handTracker.getHandsData(pipeline.getManagerScriptOutput())) # frame (i-1)th
 
         # Start post processing on (i-2)th frame
-        my_seg8.start_seg_post_processing(frame_i_2, result_i_2)
+        if DISPLAY:
+            my_seg8.start_seg_post_processing(frame_i_2, result_i_2)
         # Preparing the post processing of the mask that will be ready at (i-2)th frame
 
         while True:
@@ -225,7 +223,7 @@ if __name__ == '__main__':
             depth_frame_i = pipeline.getDepthFrame()
 
             # Initialization of variables for frame annotation
-            frame_final = np.copy(frame_i_2)
+            frame_final = frame_i_2
             obj_spatial = None
             hand = None
             class_names = None
@@ -235,7 +233,7 @@ if __name__ == '__main__':
             hand_obj_dist = "-"
 
             # Take results from Seg8 at (i-1)th frame
-            result_i_1 = my_seg8.get_yolo_seg_result() # blocking
+            result_i_1 = copy.deepcopy(my_seg8.get_yolo_seg_result()) # blocking
 
             # Send (i)th frame to Seg8
             my_seg8.set_frame_to_seg(frame_i) # update (i)th frame, non-blocking
@@ -244,22 +242,37 @@ if __name__ == '__main__':
             handsData_i = handTracker.getHandsData(pipeline.getManagerScriptOutput()) # (i)th frame
 
             if handsData_i_2:
-                hand = copy.deepcopy(handsData_i_2[0])
+                hand = handsData_i_2[0]
                 grasping_status = hand.is_grasping
                 hand_spatial = hand.xyz
+                
 
-            # Take (i-2)th post-processed frame
-            annotated_frame_i_2, masks_indices_i_2, inference_class_list_i_2 = copy.deepcopy(my_seg8.get_seg_post_processing()) # blocking
-
-            # Start post processing on (i-1)th frame
-            my_seg8.start_seg_post_processing(frame_i_1, result_i_1)
+            if DISPLAY:
+                # Take (i-2)th post-processed frame
+                annotated_frame_i_2, masks_indices_i_2, mask_contour_indices_i_2, inference_class_list_i_2 = copy.deepcopy(my_seg8.get_seg_post_processing()) # blocking
+                # Start post processing on (i-1)th frame
+                my_seg8.start_seg_post_processing(frame_i_1, result_i_1)
+            else:
+                if result_i_1 is not None and result_i_1.boxes is not None:
+                    inference_class_list_i_2 = [int(cls) for cls in result_i_1.boxes.cls.tolist()]
+                else:
+                    inference_class_list_i_2 = []
+                mask_contour_indices_i_2 = []
+                if result_i_1 is not None and result_i_1.masks is not None:
+                    for mask in result_i_1.masks:
+                        for xy in mask.xy:
+                            contour = xy.astype(np.int32).reshape(-1, 1, 2)
+                            contour_yx = np.zeros((contour.shape[0],2), dtype=np.int32)
+                            contour_yx[:,0] = contour[:, 0, 1]
+                            contour_yx[:,1] = contour[:, 0, 0]
+                            mask_contour_indices_i_2.append([contour_yx])
+                               
 
             # Calculates distance from the palm of the hand to the closest pixel of the object mask in (i-2)th frame
-            # TODO: FIX IT!
             if handsData_i_2 and hand_spatial is not None:
                 if grasping_status:
-                    if len(masks_indices_i_2) > 0:
-                        selected_index, selected_obj_spatial, selected_dist = calc_distances(masks_indices_i_2, depth_frame_i_2, hand_spatial)
+                    if len(mask_contour_indices_i_2) > 0:
+                        selected_index, selected_obj_spatial, selected_dist = calc_distances(mask_contour_indices_i_2, depth_frame_i_2, hand_spatial)
                         if selected_index is not None and selected_index >= 0 and selected_index < len(inference_class_list_i_2):
                             grasped_obj_name = my_seg8.get_class_names()[inference_class_list_i_2[selected_index]]
                             obj_weight = my_seg8.get_class_weight()[inference_class_list_i_2[selected_index]]
@@ -304,8 +317,7 @@ if __name__ == '__main__':
 
             start_time, frame_count, fps = calc_fps(start_time, frame_count, fps)
 
-            # Draw hand annotations on the frame
-            frame_final = handRender.draw(annotated_frame_i_2, handsData_i_2)
+            
 
             # Calculate the moving average grasping status
             if np.sum(grasping_status_arr) > num_elements_moving_avarage/2:
@@ -324,30 +336,39 @@ if __name__ == '__main__':
                 last_grasped_obj_name = "-"
                 last_obj_weight = "-"
                 grasping_status_avarage = False 
+                
+                
+            if DISPLAY:
+                # Draw hand annotations on the frame
+                frame_final = handRender.draw(annotated_frame_i_2, handsData_i_2)
+                
+                # Update the grid image with current status
+                grid_img = add_grid_img2(grasping_status_avarage, last_grasped_obj_name, last_obj_weight, fps, grid_height, grid_width, cell_height, cell_width)
 
-            # Update the grid image with current status
-            grid_img = add_grid_img2(grasping_status_avarage, last_grasped_obj_name, last_obj_weight, fps, grid_height, grid_width, cell_height, cell_width)
+                # Stack the main frame and the grid image vertically
+                combined_img = np.vstack((frame_final, grid_img))
 
-            # Stack the main frame and the grid image vertically
-            combined_img = np.vstack((frame_final, grid_img))
+                cv2.namedWindow('Object segmentation & grasping detection', cv2.WINDOW_KEEPRATIO)
+                cv2.imshow('Object segmentation & grasping detection', combined_img)
+                cv2.resizeWindow('Object segmentation & grasping detection', 1280, 720)
 
-            cv2.namedWindow('Object segmentation & grasping detection', cv2.WINDOW_KEEPRATIO)
-            cv2.imshow('Object segmentation & grasping detection', combined_img)
-            cv2.resizeWindow('Object segmentation & grasping detection', 1280, 720)
+                # Break the loop if 'q' key is pressed
+                if cv2.waitKey(10) == ord('q'):
+                    break
+            else:
+                print("fps: ", fps)
+
 
             # Update frames
             # frame (i-1) -> frame (i-2)
-            frame_i_2 = np.copy(frame_i_1)
-            depth_frame_i_2 = np.copy(depth_frame_i_1)
+            frame_i_2 = copy.deepcopy(frame_i_1)
+            depth_frame_i_2 = copy.deepcopy(depth_frame_i_1)
             handsData_i_2 = copy.deepcopy(handsData_i_1)
             # frame (i) -> frame (i-1)
-            frame_i_1 = np.copy(frame_i)
-            depth_frame_i_1 = np.copy(depth_frame_i)
+            frame_i_1 = copy.deepcopy(frame_i)
+            depth_frame_i_1 = copy.deepcopy(depth_frame_i)
             handsData_i_1 = copy.deepcopy(handsData_i)
-
-            # Break the loop if 'q' key is pressed
-            if cv2.waitKey(10) == ord('q'):
-                break
+            
 
     except KeyboardInterrupt:
         print("Interrupted by user")

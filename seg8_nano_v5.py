@@ -17,10 +17,11 @@ class Seg8:
 	Class for running YOLOV8-seg models efficiently (15 fps max on Jetson Nano 4GB).
 	Based on the works of Ultralytics https://docs.ultralytics.com/tasks/segment/.
 	'''
-	def __init__(self, path_to_yolo):
+	def __init__(self, path_to_yolo, post_processing_active):
 		self.__class_names = ["Crimper", "Drill", "Hammer"]
 		self.__class_weight = [0.486, 1.350, 0.930]	# [kg]
 		self.__path_to_yolo = path_to_yolo
+		self.__post_processing_active = post_processing_active
 
 		self.__frame = None
 		self.__depth_frame = None
@@ -33,12 +34,14 @@ class Seg8:
 		self.__annotated_frame = None
 		self.__annotated_frame_ready = False
 		self.__obj_masks_indices = []
+		self.__obj_masks_contour_indices = []
 		self.__inference_class_list = []
 		self.__stop = False
 
 		# Threads for YOLO
 		self.__yolo_thread = threading.Thread(target = self.__yolo_predict)
-		self.__post_processing_thread = threading.Thread(target = self.__post_processing)
+		if self.__post_processing_active:
+		    self.__post_processing_thread = threading.Thread(target = self.__post_processing)
 	# ---------------------------------------------------------------------------------------------------
 
 	def __del__(self):
@@ -48,7 +51,8 @@ class Seg8:
 		self.stop_threads()
 		self.__stop = True
 		self.__yolo_thread.join()
-		self.__post_processing_thread.join()
+		if self.__post_processing_active:
+		    self.__post_processing_thread.join()
 	# ---------------------------------------------------------------------------------------------------
 
 	def start_threads(self):
@@ -66,11 +70,13 @@ class Seg8:
 		self.__annotated_frame = None
 		self.__annotated_frame_ready = False
 		self.__obj_masks_indices = []
+		self.__obj_masks_contour_indices = []
 		self.__inference_class_list = []
 		self.__stop = False
 
 		self.__yolo_thread.start()
-		self.__post_processing_thread.start()
+		if self.__post_processing_active:
+		    self.__post_processing_thread.start()
 	# ---------------------------------------------------------------------------------------------------
 
 	def stop_threads(self):
@@ -94,8 +100,8 @@ class Seg8:
 		while not self.__stop:
 			if self.__new_frame_ready:
 				self.__new_frame_ready = False
-				yolo_frame = copy.deepcopy(self.__frame)
-				self.__seg8_result = model.predict(yolo_frame, verbose = False, max_det = 3, conf = 0.7, device = 0)[0]
+				# yolo_frame = copy.deepcopy(self.__frame)
+				self.__seg8_result = model.predict(self.__frame, verbose = False, max_det = 3, conf = 0.7, device = 0)[0]
 				self.__new_result_ready = True
 			else:
 				time.sleep(0.002)
@@ -104,7 +110,7 @@ class Seg8:
 	def get_yolo_seg_result(self):
 		while not self.__new_result_ready and not self.__stop:
 			time.sleep(0.002)
-
+		self.__new_result_ready = False
 		return self.__seg8_result
 	# ---------------------------------------------------------------------------------------------------
 
@@ -122,8 +128,8 @@ class Seg8:
 	def get_seg_post_processing(self):
 		while not self.__annotated_frame_ready and not self.__stop:
 			time.sleep(0.002)
-
-		return self.__annotated_frame, self.__obj_masks_indices, self.__inference_class_list
+		self.__annotated_frame_ready = False
+		return self.__annotated_frame, self.__obj_masks_indices, self.__obj_masks_contour_indices, self.__inference_class_list
 	# ---------------------------------------------------------------------------------------------------
 
 	def __post_processing(self):
@@ -132,7 +138,7 @@ class Seg8:
 		It creates annotated frames by drawing contours and masks, and calculates object distances using depth data.
 		'''
 		while not self.__stop: # Waiting loop, until there is a new result or stop signal is received
-			if self.__new_result_ready:
+			if self.__start_post_processing:
 				break
 			else:
 				time.sleep(0.01)
@@ -143,9 +149,11 @@ class Seg8:
 		while not self.__stop:
 			if self.__start_post_processing:
 				self.__start_post_processing = False
+				# if self.__frame_to_post_proc is not None:
 				img = np.copy(self.__frame_to_post_proc)
 				frame_to_annotate = np.copy(img)
 				obj_masks_indices = []
+				obj_masks_contour_indices = []
 				i = 0
 
 				if self.__result_to_post_proc.masks is not None:
@@ -171,13 +179,19 @@ class Seg8:
 								mask_color = [0.5, 0.5, 1]
 
 							frame_to_annotate[mask_indices[:,0], mask_indices[:,1], :] = img[mask_indices[:,0], mask_indices[:,1], :] * mask_color
+							
+							contour_yx = np.zeros((contour.shape[0],2), dtype=np.int32)
+							contour_yx[:,0] = contour[:, 0, 1]
+							contour_yx[:,1] = contour[:, 0, 0]
 
 							obj_masks_indices.append([mask_indices])
+							obj_masks_contour_indices.append([contour_yx])
 
 							i = i + 1
 
-				self.__annotated_frame = copy.deepcopy(frame_to_annotate)
-				self.__obj_masks_indices = copy.deepcopy(obj_masks_indices)
+				self.__annotated_frame = frame_to_annotate	# dovrebbe essereci una deepcopy
+				self.__obj_masks_indices = obj_masks_indices	# dovrebbe essereci una deepcopy
+				self.__obj_masks_contour_indices = obj_masks_contour_indices	# dovrebbe essereci una deepcopy
 
 				if self.__result_to_post_proc is not None and self.__result_to_post_proc.boxes is not None:
 					self.__inference_class_list = [int(cls) for cls in self.__result_to_post_proc.boxes.cls.tolist()]
@@ -230,8 +244,15 @@ class Seg8:
 		Method to retrieve object mask indices
 		'''
 		return self.__obj_masks_indices
+		
+	def get_obj_masks_contour_indices(self):
+		'''
+		Method to retrieve object mask indices
+		'''
+		return self.__obj_masks_contour_indices
 	# ---------------------------------------------------------------------------------------------------
 
+	# deprecated
 	def update(self, frame, depth_frame):
 		'''
 		This function must be called in a loop
