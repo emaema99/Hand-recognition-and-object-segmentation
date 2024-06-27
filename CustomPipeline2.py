@@ -204,7 +204,7 @@ class CustomPipeline:
 		right.setFps(self.internal_fps)
 
 		stereo.setDefaultProfilePreset(dai.node.StereoDepth.PresetMode.HIGH_DENSITY)
-		stereo.setConfidenceThreshold(200)
+		stereo.setConfidenceThreshold(255)
 		stereo.setLeftRightCheck(True) # LR-check is required for depth alignment
 		stereo.setDepthAlign(dai.CameraBoardSocket.CAM_A)
 		stereo.setSubpixel(False) # SubPixel=True brings latency

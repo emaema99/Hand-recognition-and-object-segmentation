@@ -10,16 +10,17 @@ class HostSpatialsCalc:
     Adapted from https://github.com/luxonis/depthai-experiments/blob/master/gen2-calc-spatials-on-host/calc.py
     '''
     def __init__(self, device, depth_data):
-        # Initialize the class with device calibration data.
-        # Required information for calculating spatial coordinates on the host
-        # self.monoHFOV = np.deg2rad(calibData.getFov(dai.CameraBoardSocket.LEFT))
-        # the FOV of color camera is measured for the full resolution, 4056x3040, 
-        # so would need to scale back accordingly if 4k/1080p is selected.
-        # 4k is 3840x2160 central crop of 4056x3040, so there is a HFOV loss,  
-        # so HFOV will be scaled back by 3840/4056. 1080p has the same FOV as 4k (it's 4k downscaled/binned).
-        self.calibData = device.readCalibration()
-        # self.HFOV = np.deg2rad(self.calibData.getFov(dai.CameraBoardSocket(depth_data.getInstanceNum()), useSpec=False))
-        self.HFOV = np.deg2rad(self.calibData.getFov(dai.CameraBoardSocket.RGB)) * 3840 / 4056
+        '''
+        Required information for calculating spatial coordinates on the host. FOV of color camera is measured for 
+        the full resolution, 4056x3040, so it would need to scale back accordingly if 4k/1080p is selected.
+        4k is 3840x2160 central crop of 4056x3040, so there is a HFOV loss -> HFOV will be scaled back by 3840/4056.
+        1080p has the same FOV as 4k (it's 4k downscaled/binned).
+        '''
+        self.calibData = device.readCalibration() # Initialize the class with device calibration data
+        self.HFOV = np.deg2rad(self.calibData.getFov(dai.CameraBoardSocket(depth_data.getInstanceNum())))
+        # ci, w, h = self.calibData.getDefaultIntrinsics(dai.CameraBoardSocket.LEFT)
+        # self.HFOV = 2*math.atan((w/2)/ci[0][0])
+        # self.HFOV = np.rad2deg(1.218743397384473)
 
         # Constants for depth processing
         self.DELTA = 5  # Take 10x10 depth pixels around point for depth averaging
@@ -106,12 +107,12 @@ class HostSpatialsCalc:
         averageDepth = averaging_method(roi_depth_values_valid)
 
         # Calculate the centroid of the valid ROI pixels
-        centroid = np.array([int(np.sum(roi_pixels_in_range_valid[:,0]) / len(roi_pixels_in_range_valid[:,0])),
-                             int(np.sum(roi_pixels_in_range_valid[:,1]) / len(roi_pixels_in_range_valid[:,1]))])
+        centroid = np.array([int(np.sum(roi_pixels_in_range_valid[:,1]) / len(roi_pixels_in_range_valid[:,1])), #centroid[0]->pixel y, spatial x
+                             int(np.sum(roi_pixels_in_range_valid[:,0]) / len(roi_pixels_in_range_valid[:,0]))])#centroid[1]->pixel x, spatial y
 
         # Calculate the middle of the depth image width and height
-        midW = int(depth_frame.shape[1] / 2)
-        midH = int(depth_frame.shape[0] / 2)
+        midW = int(depth_frame.shape[1] / 2) # colonne, spatial x
+        midH = int(depth_frame.shape[0] / 2) # righe, spatial y
         bb_x_pos = centroid[0] - midW
         bb_y_pos = centroid[1] - midH
 
@@ -157,8 +158,8 @@ class HostSpatialsCalc:
         midH = int(depth_frame_c.shape[0] / 2)
 
         # Calculate positions relative to the center of the image
-        x_pos_arr = roi_pixels_in_range_downsampled[:,0] - midW
-        y_pos_arr = roi_pixels_in_range_downsampled[:,1] - midH
+        x_pos_arr = roi_pixels_in_range_downsampled[:,1] - midW
+        y_pos_arr = roi_pixels_in_range_downsampled[:,0] - midH
 
         # Calculate angles for each ROI pixel
         x_angle_tan_arr = np.zeros(len(x_pos_arr))
