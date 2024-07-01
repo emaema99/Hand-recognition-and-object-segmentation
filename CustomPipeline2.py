@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
 import mediapipe_utils as mpu
-import depthai as dai
-import sys
-import re
 
+from depthai import Device, CameraBoardSocket, Pipeline, OpenVINO, node, ColorCameraProperties, MonoCameraProperties
+from sys import exit
+from re import sub, DOTALL
 from pathlib import Path
 from string import Template
 
@@ -70,7 +70,7 @@ class CustomPipeline:
                 use_handedness_average = True,
                 single_hand_tolerance_thresh = 10,
                 use_same_image = True,
-                lm_nb_threads = 2,
+                lm_nb_threads = 1,
                 trace = 0
                 ):
 
@@ -99,7 +99,7 @@ class CustomPipeline:
 		self.use_same_image = use_same_image
 
 		# Device object declaration
-		self.device = dai.Device()
+		self.device = Device()
 
 		# ==== Setting Camera Parameters ====
 		# Check USB Speed
@@ -115,9 +115,9 @@ class CustomPipeline:
 
 		# Check if the device supports stereo
 		cameras = self.device.getConnectedCameras()
-		if not(dai.CameraBoardSocket.CAM_B in cameras and dai.CameraBoardSocket.CAM_C in cameras):
+		if not(CameraBoardSocket.CAM_B in cameras and CameraBoardSocket.CAM_C in cameras):
 			print("FATAL ERROR: depth unavailable on this device, ADIOS")
-			sys.exit(1)
+			exit(1)
 
 		# Set Camera FPS for lm_model = lite configuration
 		self.internal_fps =  internal_fps
@@ -161,20 +161,20 @@ class CustomPipeline:
 		print("Creating pipeline...")
 
 		# Start defining a pipeline
-		pipeline = dai.Pipeline()
-		pipeline.setOpenVINOVersion(version = dai.OpenVINO.Version.VERSION_2021_4)
+		pipeline = Pipeline()
+		pipeline.setOpenVINOVersion(version = OpenVINO.Version.VERSION_2021_4)
 		self.pd_input_length = 128
 
 		# ==== Manager Script Node ====
-		manager_script = pipeline.create(dai.node.Script)
+		manager_script = pipeline.create(node.Script)
 		manager_script.setScript(self.build_manager_script()) #Create the Manager Node from template
 
 		# ==== Camera RGB ====
 		print("Creating Color Camera...")
 		cam = pipeline.createColorCamera()
-		cam.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1080_P)
-		cam.setBoardSocket(dai.CameraBoardSocket.CAM_A)
-		cam.setColorOrder(dai.ColorCameraProperties.ColorOrder.BGR)
+		cam.setResolution(ColorCameraProperties.SensorResolution.THE_1080_P)
+		cam.setBoardSocket(CameraBoardSocket.CAM_A)
+		cam.setColorOrder(ColorCameraProperties.ColorOrder.BGR)
 		cam.setInterleaved(False)
 		cam.setIspScale(self.scale_nd[0], self.scale_nd[1])
 		cam.setFps(self.internal_fps)
@@ -184,7 +184,7 @@ class CustomPipeline:
 		# ==== Stereo and Depth Camera ====
 		print("Creating MonoCameras, Stereo and SpatialLocationCalculator nodes...")
 		calib_data = self.device.readCalibration()
-		calib_lens_pos = calib_data.getLensPosition(dai.CameraBoardSocket.CAM_A)
+		calib_lens_pos = calib_data.getLensPosition(CameraBoardSocket.CAM_A)
 		print(f"RGB calibration lens position: {calib_lens_pos}")
 		cam.initialControl.setManualFocus(calib_lens_pos) # RGB needs fixed focus to properly align with depth
 
@@ -192,20 +192,20 @@ class CustomPipeline:
 		right = pipeline.createMonoCamera()
 		stereo = pipeline.createStereoDepth()
 
-		left.setBoardSocket(dai.CameraBoardSocket.CAM_B)
+		left.setBoardSocket(CameraBoardSocket.CAM_B)
 		left.setCamera("left")
-		left.setResolution(dai.MonoCameraProperties.SensorResolution.THE_480_P)
+		left.setResolution(MonoCameraProperties.SensorResolution.THE_480_P)
 		left.setFps(self.internal_fps)
 
-		right.setBoardSocket(dai.CameraBoardSocket.CAM_C)
+		right.setBoardSocket(CameraBoardSocket.CAM_C)
 		right.setCamera("right")
-		right.setResolution(dai.MonoCameraProperties.SensorResolution.THE_480_P)
+		right.setResolution(MonoCameraProperties.SensorResolution.THE_480_P)
 		right.setFps(self.internal_fps)
 
-		stereo.setDefaultProfilePreset(dai.node.StereoDepth.PresetMode.HIGH_DENSITY)
+		stereo.setDefaultProfilePreset(node.StereoDepth.PresetMode.HIGH_DENSITY)
 		stereo.setConfidenceThreshold(255)
 		stereo.setLeftRightCheck(True) # LR-check is required for depth alignment
-		stereo.setDepthAlign(dai.CameraBoardSocket.CAM_A)
+		stereo.setDepthAlign(CameraBoardSocket.CAM_A)
 		stereo.setSubpixel(False) # SubPixel=True brings latency
 
 		# === Spatial Location Calculator ====
@@ -216,7 +216,7 @@ class CustomPipeline:
 
 		# ==== Pre-processing Palm Detection Image Manipulation ====
 		print("Creating Palm Detection pre processing image manip...")
-		pre_pd_manip = pipeline.create(dai.node.ImageManip)
+		pre_pd_manip = pipeline.create(node.ImageManip)
 		pre_pd_manip.setMaxOutputFrameSize(self.pd_input_length*self.pd_input_length*3) # palm detection NN input length = 128
 		pre_pd_manip.setWaitForConfigInput(True)
 		pre_pd_manip.inputImage.setQueueSize(1)
@@ -224,17 +224,17 @@ class CustomPipeline:
 
 		# ==== Palm Detection ====
 		print("Creating Palm Detection Neural Network...")
-		pd_nn = pipeline.create(dai.node.NeuralNetwork)
+		pd_nn = pipeline.create(node.NeuralNetwork)
 		pd_nn.setBlobPath(self.palm_detection_model)
 
 		# ==== Post-processing Palm Detection ====
 		print("Creating Palm Detection post processing Neural Network...")
-		post_pd_nn = pipeline.create(dai.node.NeuralNetwork)
+		post_pd_nn = pipeline.create(node.NeuralNetwork)
 		post_pd_nn.setBlobPath(self.post_process_palm_detection_model)
 
 		# ==== Pre-processing Landmark Image Manipulation ====
 		print("Creating Hand Landmark pre processing image manip...") 
-		pre_lm_manip = pipeline.create(dai.node.ImageManip)
+		pre_lm_manip = pipeline.create(node.ImageManip)
 		self.lm_input_length = 224
 		pre_lm_manip.setMaxOutputFrameSize(self.lm_input_length*self.lm_input_length*3)
 		pre_lm_manip.setWaitForConfigInput(True)
@@ -243,7 +243,7 @@ class CustomPipeline:
 
 		# ==== Landmark Detection ====
 		print(f"Creating Hand Landmark Neural Network ({'1 thread' if self.lm_nb_threads == 1 else '2 threads'})...")          
-		lm_nn = pipeline.create(dai.node.NeuralNetwork)
+		lm_nn = pipeline.create(node.NeuralNetwork)
 		lm_nn.setBlobPath(self.landmark_model)
 		lm_nn.setNumInferenceThreads(self.lm_nb_threads)
 
@@ -330,9 +330,9 @@ class CustomPipeline:
 		)
 
 		# Remove comments and empty lines
-		code = re.sub(r'"{3}.*?"{3}', '', code, flags=re.DOTALL)
-		code = re.sub(r'#.*', '', code)
-		code = re.sub('\n\s*\n', '\n', code)
+		code = sub(r'"{3}.*?"{3}', '', code, flags=DOTALL)
+		code = sub(r'#.*', '', code)
+		code = sub('\n\s*\n', '\n', code)
 
 		# For debugging
 		if self.trace & 8:
