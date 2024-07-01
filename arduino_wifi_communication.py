@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 
-####################################################################################################
-# Script to send data to the Arduino via WiFi with a TCP connection
-####################################################################################################
-
 from socket import socket, AF_INET, SOCK_STREAM
 from struct import pack
 
 class ArduinoCommunicator:
+    '''
+    Class to send data to the Arduino via WiFi with a TCP connection
+    '''
     def __init__(self, ip='192.168.0.21', port=50000, buffer_size=1):
         """
         Initialize the ArduinoCommunicator with IP address, port, and buffer size.
