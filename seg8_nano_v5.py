@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 
-import copy
-import threading
-import time
-import cv2
-import numpy as np
-import torch
-
+from numpy import copy, zeros, argwhere, uint8, int32
+from cv2 import drawContours, FILLED
+from time import sleep
+from copy import deepcopy
+from torch import cuda
+from threading import Thread
 from ultralytics import YOLO
 
 # Set the current CUDA device using the index number of the GPU
-torch.cuda.set_device(0)
+cuda.set_device(0)
 
 class Seg8:
 	'''
@@ -39,9 +38,9 @@ class Seg8:
 		self.__stop = False
 
 		# Threads for YOLO
-		self.__yolo_thread = threading.Thread(target = self.__yolo_predict)
+		self.__yolo_thread = Thread(target = self.__yolo_predict)
 		if self.__post_processing_active:
-		    self.__post_processing_thread = threading.Thread(target = self.__post_processing)
+			self.__post_processing_thread = Thread(target = self.__post_processing)
 	# ---------------------------------------------------------------------------------------------------
 
 	def __del__(self):
@@ -52,7 +51,7 @@ class Seg8:
 		self.__stop = True
 		self.__yolo_thread.join()
 		if self.__post_processing_active:
-		    self.__post_processing_thread.join()
+			self.__post_processing_thread.join()
 	# ---------------------------------------------------------------------------------------------------
 
 	def start_threads(self):
@@ -76,7 +75,7 @@ class Seg8:
 
 		self.__yolo_thread.start()
 		if self.__post_processing_active:
-		    self.__post_processing_thread.start()
+			self.__post_processing_thread.start()
 	# ---------------------------------------------------------------------------------------------------
 
 	def stop_threads(self):
@@ -94,40 +93,40 @@ class Seg8:
 
 		# Wait until a frame is available or stop signal is received
 		while self.__frame is None and not self.__stop:
-			time.sleep(0.1)
+			sleep(0.1)
 
 		# Continuous prediction loop
 		while not self.__stop:
 			if self.__new_frame_ready:
 				self.__new_frame_ready = False
-				# yolo_frame = copy.deepcopy(self.__frame)
+				# yolo_frame = deepcopy(self.__frame)
 				self.__seg8_result = model.predict(self.__frame, verbose = False, max_det = 3, conf = 0.7, device = 0)[0]
 				self.__new_result_ready = True
 			else:
-				time.sleep(0.002)
+				sleep(0.002)
 	# ---------------------------------------------------------------------------------------------------
 
 	def get_yolo_seg_result(self):
 		while not self.__new_result_ready and not self.__stop:
-			time.sleep(0.002)
+			sleep(0.002)
 		self.__new_result_ready = False
 		return self.__seg8_result
 	# ---------------------------------------------------------------------------------------------------
 
 	def set_frame_to_seg(self, frame):
-		self.__frame = copy.deepcopy(frame)
+		self.__frame = deepcopy(frame)
 		self.__new_frame_ready = True
 	# ---------------------------------------------------------------------------------------------------
 
 	def start_seg_post_processing(self, frame_to_post_proc, result_to_post_proc):
-		self.__frame_to_post_proc = copy.deepcopy(frame_to_post_proc)
-		self.__result_to_post_proc = copy.deepcopy(result_to_post_proc)
+		self.__frame_to_post_proc = deepcopy(frame_to_post_proc)
+		self.__result_to_post_proc = deepcopy(result_to_post_proc)
 		self.__start_post_processing = True
 	# ---------------------------------------------------------------------------------------------------
 
 	def get_seg_post_processing(self):
 		while not self.__annotated_frame_ready and not self.__stop:
-			time.sleep(0.002)
+			sleep(0.002)
 		self.__annotated_frame_ready = False
 		return self.__annotated_frame, self.__obj_masks_indices, self.__obj_masks_contour_indices, self.__inference_class_list
 	# ---------------------------------------------------------------------------------------------------
@@ -141,17 +140,17 @@ class Seg8:
 			if self.__start_post_processing:
 				break
 			else:
-				time.sleep(0.01)
+				sleep(0.01)
 
 		# Create an empty mask for the full image size
-		full_mask = np.zeros(self.__result_to_post_proc.orig_img.shape[:2], dtype=np.uint8)
+		full_mask = zeros(self.__result_to_post_proc.orig_img.shape[:2], dtype=uint8)
 
 		while not self.__stop:
 			if self.__start_post_processing:
 				self.__start_post_processing = False
 				# if self.__frame_to_post_proc is not None:
-				img = np.copy(self.__frame_to_post_proc)
-				frame_to_annotate = np.copy(img)
+				img = copy(self.__frame_to_post_proc)
+				frame_to_annotate = copy(img)
 				obj_masks_indices = []
 				obj_masks_contour_indices = []
 				i = 0
@@ -165,10 +164,10 @@ class Seg8:
 							full_mask.fill(0)
 
 							# Create contour mask 
-							contour = xy.astype(np.int32).reshape(-1, 1, 2)
-							_ = cv2.drawContours(full_mask, [contour], -1, (255), cv2.FILLED)
+							contour = xy.astype(int32).reshape(-1, 1, 2)
+							_ = drawContours(full_mask, [contour], -1, (255), FILLED)
 
-							mask_indices = np.argwhere(full_mask ==  255)
+							mask_indices = argwhere(full_mask ==  255)
 
 							# Assign colors based on class
 							if class_list[i] == 0:
@@ -180,7 +179,7 @@ class Seg8:
 
 							frame_to_annotate[mask_indices[:,0], mask_indices[:,1], :] = img[mask_indices[:,0], mask_indices[:,1], :] * mask_color
 							
-							contour_yx = np.zeros((contour.shape[0],2), dtype=np.int32)
+							contour_yx = zeros((contour.shape[0],2), dtype=int32)
 							contour_yx[:,0] = contour[:, 0, 1]
 							contour_yx[:,1] = contour[:, 0, 0]
 
@@ -201,7 +200,7 @@ class Seg8:
 				self.__annotated_frame_ready = True
 
 			else:
-				time.sleep(0.005)
+				sleep(0.005)
 	# ---------------------------------------------------------------------------------------------------
 
 	def get_result_class_list(self):

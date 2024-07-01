@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import numpy as np
 import mediapipe_utils as mpu
 import depthai as dai
 import sys

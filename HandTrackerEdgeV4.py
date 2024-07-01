@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 
-import numpy as np
 import mediapipe_utils as mpu
-import marshal
+
+from numpy import array, int32
+from marshal import loads
 
 class HandTracker:
     '''
@@ -33,12 +34,12 @@ class HandTracker:
         hand.handedness = res["handedness"][hand_idx]
         hand.label = "right" if hand.handedness > 0.5 else "left"
 
-        hand.norm_landmarks = np.array(res['rrn_lms'][hand_idx]).reshape(-1,3)
-        hand.landmarks = (np.array(res["sqn_lms"][hand_idx]) * self.frame_size).reshape(-1,2).astype(np.int32)
+        hand.norm_landmarks = array(res['rrn_lms'][hand_idx]).reshape(-1,3)
+        hand.landmarks = (array(res["sqn_lms"][hand_idx]) * self.frame_size).reshape(-1,2).astype(int32)
 
-        hand.xyz = np.array(res["xyz"][hand_idx])
+        hand.xyz = array(res["xyz"][hand_idx])
         hand.xyz_zone = res["xyz_zone"][hand_idx]
-        hand.xyz_lms = np.array(res["xyz_lms"][hand_idx])
+        hand.xyz_lms = array(res["xyz_lms"][hand_idx])
 
         # If we added padding to make the image square, we need to remove this padding from landmark coordinates and from rect_points
         if self.pad_h > 0:
@@ -52,7 +53,7 @@ class HandTracker:
                 hand.rect_points[i][0] -= self.pad_w
 
         # World landmarks (Passed TRUE)
-        hand.world_landmarks = np.array(res["world_lms"][hand_idx]).reshape(-1, 3)
+        hand.world_landmarks = array(res["world_lms"][hand_idx]).reshape(-1, 3)
 
         hand = mpu.recognize_gesture(hand)
 
@@ -63,7 +64,7 @@ class HandTracker:
         '''
         Get Results from Manager Script "template_manager_script_solo.py"
         '''
-        handsResult = marshal.loads(handsData)
+        handsResult = loads(handsData)
         hands = []
 
         for i in range(len(handsResult.get("lm_score",[]))):

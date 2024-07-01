@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 
-import cv2
-import numpy as np
-import re
-
+from cv2 import __version__, dnn, getAffineTransform, warpAffine
+from numpy import array, dot, seterr, argmax, tile, linalg, arccos, float32, exp, degrees
+from re import sub
 from collections import namedtuple
-from math import ceil, sqrt, pi, floor, sin, cos, atan2, gcd
+from math import ceil, sqrt, floor, sin, cos, atan2, gcd, pi
 
-np.seterr(over = 'ignore')
+seterr(over = 'ignore')
 
 class HandRegion:
     """
@@ -45,8 +44,8 @@ class HandRegion:
         world_landmarks_rotated = self.world_landmarks.copy()
         sin_rot = sin(self.rotation)
         cos_rot = cos(self.rotation)
-        rot_m = np.array([[cos_rot, sin_rot], [-sin_rot, cos_rot]])
-        world_landmarks_rotated[:,:2] = np.dot(world_landmarks_rotated[:,:2], rot_m)
+        rot_m = array([[cos_rot, sin_rot], [-sin_rot, cos_rot]])
+        world_landmarks_rotated[:,:2] = dot(world_landmarks_rotated[:,:2], rot_m)
         return world_landmarks_rotated
 
     def print(self):
@@ -160,7 +159,7 @@ def generate_anchors(options):
         
         layer_id = last_same_stride_layer
 
-    return np.array(anchors)
+    return array(anchors)
 # -------------------------------------------------------------------------------------------------------------
 
 def generate_handtracker_anchors(input_size_width, input_size_height):
@@ -250,10 +249,10 @@ def decode_bboxes(score_thresh, scores, bboxes, anchors, scale = 128, best_only 
     bboxes: shape = [ number of anchors x 18], 18 = 4 (bounding box : (cx,cy,w,h) + 14 (7 palm keypoints)
     """
     regions = []
-    scores = 1 / (1 + np.exp(-scores))
+    scores = 1 / (1 + exp(-scores))
 
     if best_only:
-        best_id = np.argmax(scores)
+        best_id = argmax(scores)
         if scores[best_id] < score_thresh: return regions
         det_scores = scores[best_id:best_id+1]
         det_bboxes2 = bboxes[best_id:best_id+1]
@@ -265,7 +264,7 @@ def decode_bboxes(score_thresh, scores, bboxes, anchors, scale = 128, best_only 
         det_bboxes2 = bboxes[detection_mask]
         det_anchors = anchors[detection_mask]
 
-    det_bboxes = det_bboxes2* np.tile(det_anchors[:,2:4], 9) / scale + np.tile(det_anchors[:,0:2],9)
+    det_bboxes = det_bboxes2* tile(det_anchors[:,2:4], 9) / scale + tile(det_anchors[:,0:2],9)
     det_bboxes[:,2:4] = det_bboxes[:,2:4] - det_anchors[:,0:2]
     det_bboxes[:,0:2] = det_bboxes[:,0:2] - det_bboxes[:,3:4] * 0.5
 
@@ -291,26 +290,26 @@ def decode_bboxes(score_thresh, scores, bboxes, anchors, scale = 128, best_only 
     return regions
 # -------------------------------------------------------------------------------------------------------------
 
-# Starting from opencv 4.5.4, cv2.dnn.NMSBoxes output format changed
-cv2_version = cv2.__version__.split('.')
+# Starting from opencv 4.5.4, dnn.NMSBoxes output format changed
+cv2_version = __version__.split('.')
 v0 = int(cv2_version[0])
 v1 = int(cv2_version[1])
-v2 = int(re.sub(r'\D+', '', cv2_version[2]))
+v2 = int(sub(r'\D+', '', cv2_version[2]))
 
 if  v0 > 4 or (v0 == 4 and (v1 > 5 or (v1 == 5 and v2 >= 4))):
     def non_max_suppression(regions, nms_thresh):
-        # cv2.dnn.NMSBoxes(boxes, scores, 0, nms_thresh) needs:
+        # dnn.NMSBoxes(boxes, scores, 0, nms_thresh) needs:
         # boxes = [ [x, y, w, h], ...] with x, y, w, h of type int
         # Currently, x, y, w, h are float between 0 and 1, so we arbitrarily multiply by 1000 and cast to int
         boxes = [ [int(x*1000) for x in r.pd_box] for r in regions]        
         scores = [r.pd_score for r in regions]
-        indices = cv2.dnn.NMSBoxes(boxes, scores, 0, nms_thresh) # Not using top_k=2 here because it does not give expected result. Bug ?
+        indices = dnn.NMSBoxes(boxes, scores, 0, nms_thresh) # Not using top_k=2 here because it does not give expected result. Bug ?
         return [regions[i] for i in indices]
 else:
     def non_max_suppression(regions, nms_thresh):
         boxes = [ [int(x*1000) for x in r.pd_box] for r in regions]        
         scores = [r.pd_score for r in regions]
-        indices = cv2.dnn.NMSBoxes(boxes, scores, 0, nms_thresh)
+        indices = dnn.NMSBoxes(boxes, scores, 0, nms_thresh)
         return [regions[i[0]] for i in indices]
 # -------------------------------------------------------------------------------------------------------------
 
@@ -436,14 +435,14 @@ def hand_landmarks_to_rect(hand):
     ids_for_bounding_box = [0, 1, 2, 3, 5, 6, 9, 10, 13, 14, 17, 18]
     lms_xy = lms_xy[ids_for_bounding_box]
     # Find center of the boundaries of landmarks
-    axis_aligned_center = 0.5 * (np.min(lms_xy, axis=0) + np.max(lms_xy, axis=0))
+    axis_aligned_center = 0.5 * (min(lms_xy, axis=0) + max(lms_xy, axis=0))
     # Find boundaries of rotated landmarks
     original = lms_xy - axis_aligned_center
-    c, s = np.cos(rotation), np.sin(rotation)
-    rot_mat = np.array(((c, -s), (s, c)))
+    c, s = cos(rotation), sin(rotation)
+    rot_mat = array(((c, -s), (s, c)))
     projected = original.dot(rot_mat)
-    min_proj = np.min(projected, axis=0)
-    max_proj = np.max(projected, axis=0)
+    min_proj = min(projected, axis=0)
+    max_proj = max(projected, axis=0)
     projected_center = 0.5 * (min_proj + max_proj)
     center = rot_mat.dot(projected_center) + axis_aligned_center
     width, height = max_proj - min_proj
@@ -458,31 +457,31 @@ def hand_landmarks_to_rect(hand):
 # -------------------------------------------------------------------------------------------------------------
 
 def warp_rect_img(rect_points, img, w, h):
-        src = np.array(rect_points[1:], dtype=np.float32) # rect_points[0] is left bottom point !
-        dst = np.array([(0, 0), (h, 0), (h, w)], dtype=np.float32)
-        mat = cv2.getAffineTransform(src, dst)
+        src = array(rect_points[1:], dtype=float32) # rect_points[0] is left bottom point !
+        dst = array([(0, 0), (h, 0), (h, w)], dtype=float32)
+        mat = getAffineTransform(src, dst)
 
-        return cv2.warpAffine(img, mat, (w, h))
+        return warpAffine(img, mat, (w, h))
 # -------------------------------------------------------------------------------------------------------------
 
 def distance(a, b):
     """
     a, b: 2 points (in 2D or 3D)
     """
-    return np.linalg.norm(a-b)
+    return linalg.norm(a-b)
 # -------------------------------------------------------------------------------------------------------------
 
 def angle(a, b, c):
     '''
     https://stackoverflow.com/questions/35176451/python-code-to-calculate-angle-between-three-point-using-their-3d-coordinates.
-    a, b and c : points as np.array([x, y, z])
+    a, b and c : points as array([x, y, z])
     ''' 
     ba = a - b
     bc = c - b
-    cosine_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc))
-    angle = np.arccos(cosine_angle)
+    cosine_angle = dot(ba, bc) / (linalg.norm(ba) * linalg.norm(bc))
+    angle = arccos(cosine_angle)
 
-    return np.degrees(angle)
+    return degrees(angle)
 # -------------------------------------------------------------------------------------------------------------
 
 def find_isp_scale_params(size, resolution, is_height=True):

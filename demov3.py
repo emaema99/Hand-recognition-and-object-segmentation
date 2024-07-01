@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
-import cv2
-import numpy as np
-import time
-import copy
+from cv2 import FONT_HERSHEY_SIMPLEX, LINE_AA, WINDOW_KEEPRATIO, putText, namedWindow, imshow, resizeWindow, waitKey, destroyAllWindows
+from numpy import uint8, inf, min, nan, int32, isnan, ndarray, linalg, bool_, vstack, argmin, argwhere, mean, sum, full, copy, zeros
+from time import time, sleep
+from copy import deepcopy
 
 from HandTrackerRendererV3 import HandTrackerRenderer
 from CustomPipeline2 import CustomPipeline
@@ -30,19 +30,19 @@ def add_grid_img(gesture_status, object_name, object_weight, fps, grid_height, g
     '''
     It creates a blank image grid with grasping status, object name, object weight, and FPS displayed.
     '''
-    grid_img = np.zeros((grid_height, grid_width, 3), dtype=np.uint8)
+    grid_img = zeros((grid_height, grid_width, 3), dtype=uint8)
 
     # Adds fixed text labels
-    cv2.putText(grid_img, f'Status:', (10, cell_height // 2 + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 1, cv2.LINE_AA)
-    cv2.putText(grid_img, f'Object:', (2*cell_width-30, cell_height // 2 + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 1, cv2.LINE_AA)
-    cv2.putText(grid_img, f'Weight:', (10, cell_height + cell_height // 2), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 1, cv2.LINE_AA)
-    cv2.putText(grid_img, f'Fps:', (2*cell_width - 30, cell_height + cell_height // 2), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 1, cv2.LINE_AA)
+    putText(grid_img, f'Status:', (10, cell_height // 2 + 5), FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 1, LINE_AA)
+    putText(grid_img, f'Object:', (2*cell_width-30, cell_height // 2 + 5), FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 1, LINE_AA)
+    putText(grid_img, f'Weight:', (10, cell_height + cell_height // 2), FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 1, LINE_AA)
+    putText(grid_img, f'Fps:', (2*cell_width - 30, cell_height + cell_height // 2), FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 1, LINE_AA)
 
     # Adds dynamic data. Modify the blank spaces and font dimension to obtain a better visualization. 
-    cv2.putText(grid_img, ' ' + gesture_status, (90, cell_height // 2 + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 1, cv2.LINE_AA)
-    cv2.putText(grid_img, object_name, (2*cell_width + 60, cell_height // 2 + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 1, cv2.LINE_AA)
-    cv2.putText(grid_img, ' ' + object_weight +' kg', (90, cell_height + cell_height // 2), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 1, cv2.LINE_AA)
-    cv2.putText(grid_img, f'{fps}', (2*cell_width + 60, cell_height + cell_height // 2), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 1, cv2.LINE_AA)
+    putText(grid_img, ' ' + gesture_status, (90, cell_height // 2 + 5), FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 1, LINE_AA)
+    putText(grid_img, object_name, (2*cell_width + 60, cell_height // 2 + 5), FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 1, LINE_AA)
+    putText(grid_img, ' ' + object_weight +' kg', (90, cell_height + cell_height // 2), FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 1, LINE_AA)
+    putText(grid_img, f'{fps}', (2*cell_width + 60, cell_height + cell_height // 2), FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 1, LINE_AA)
 
     return grid_img
 
@@ -70,9 +70,9 @@ def calc_fps(start_time, frame_count, fps):
     '''
     frame_count += 1
 
-    if time.time() - start_time > 1:
-        fps = frame_count / (time.time() - start_time)
-        start_time = time.time()
+    if time() - start_time > 1:
+        fps = frame_count / (time() - start_time)
+        start_time = time()
         frame_count = 0
 
     return start_time, frame_count, fps
@@ -82,8 +82,8 @@ def draw_mask(frame_to_annotate, mask, class_type):
     Mask appliance based on the class of the detected object. 
     Using a copy of the frame not to alter the original.
     '''
-    img = np.copy(frame_to_annotate)
-    annotated_frame = np.copy(frame_to_annotate)
+    img = copy(frame_to_annotate)
+    annotated_frame = copy(frame_to_annotate)
 
     if class_type == 0:
         mask_color = [0.1, 0.1, 1]
@@ -104,7 +104,7 @@ def calc_distances(masks_pixels, depth_frame, hand_spatial):
             # Calculate spatial data for each mask
             mask_spatial, mask_pixels_in_range = spatial_calc.calc_roi_each_point_spatials(depth_frame, masks_pixels[i], down_sampling)
 
-            if isinstance(mask_spatial, np.ndarray):
+            if isinstance(mask_spatial, ndarray):
                 mask_spatial = mask_spatial.reshape(-1,3)
 
             masks_spatial.append(mask_spatial)
@@ -113,25 +113,25 @@ def calc_distances(masks_pixels, depth_frame, hand_spatial):
         # Process hand data (if available and if a hand was detected)
         if grasping_status and hand_spatial is not None:
             if len(masks_spatial) > 0:
-                min_dist = np.inf
+                min_dist = inf
                 min_dist_index = None
                 min_index = None
                 for i in range(len(masks_spatial)):
-                    if masks_spatial[i] is not None and isinstance(masks_spatial[i], np.ndarray):
-                        hand_spatial_matr = np.full(masks_spatial[i].shape, hand_spatial)
+                    if masks_spatial[i] is not None and isinstance(masks_spatial[i], ndarray):
+                        hand_spatial_matr = full(masks_spatial[i].shape, hand_spatial)
                         # Calculates the distance between the palm and the closest pixel of the mask.
-                        dists = np.linalg.norm(hand_spatial_matr - masks_spatial[i], axis = 1)
-                        mask_min_dist = np.min(dists)
+                        dists = linalg.norm(hand_spatial_matr - masks_spatial[i], axis = 1)
+                        mask_min_dist = min(dists)
                         if mask_min_dist < min_dist:
-                            min_dist = copy.deepcopy(mask_min_dist)
-                            min_index = copy.deepcopy(i)
-                            mask_min_dist_index = np.argmin(dists)
-                            min_dist_index = copy.deepcopy(mask_min_dist_index)
+                            min_dist = deepcopy(mask_min_dist)
+                            min_index = deepcopy(i)
+                            mask_min_dist_index = argmin(dists)
+                            min_dist_index = deepcopy(mask_min_dist_index)
 
                 if min_index is not None and min_dist_index is not None:
                     return min_index, masks_spatial[min_index][min_dist_index,:], min_dist
 
-    return None, [np.nan, np.nan, np.nan], None
+    return None, [nan, nan, nan], None
 
 if __name__ == '__main__':
     '''
@@ -149,14 +149,14 @@ if __name__ == '__main__':
     my_seg8.start_threads()
 
     # Initialize variables for frame processing and FPS calculation
-    start_time = time.time()
+    start_time = time()
     frame_count = 0
     fps = 0
 
     # Initialize arrays and variables for grasping detection and object tracking
-    grasping_status_arr = np.zeros(num_elements_moving_avarage, dtype=np.bool_)
-    hand_spatial_arr = np.zeros([num_elements_moving_avarage, 3])
-    obj_spatial_arr = np.zeros([num_elements_moving_avarage, 3])
+    grasping_status_arr = zeros(num_elements_moving_avarage, dtype=bool_)
+    hand_spatial_arr = zeros([num_elements_moving_avarage, 3])
+    obj_spatial_arr = zeros([num_elements_moving_avarage, 3])
     last_grasped_obj_name = "-"
     last_obj_weight = "-"
     released = True
@@ -175,42 +175,42 @@ if __name__ == '__main__':
         while first_frame is None or first_depth_frame is None:
             first_frame = pipeline.getFrame()
             first_depth_frame = pipeline.getDepthFrame()
-            time.sleep(0.1)
+            sleep(0.1)
 
         # Sets the grid and cells dimensions, depending on the frame shape.
         grid_height = 100
         grid_width = first_frame.shape[1]
-        grid_img = np.zeros((grid_height, grid_width, 3), dtype=np.uint8)
+        grid_img = zeros((grid_height, grid_width, 3), dtype=uint8)
         cell_height = grid_height // 2
         cell_width = grid_width // 3
         grid_img = add_grid_img("Not Grasping", "-", "-", "0", grid_height, grid_width, cell_height, cell_width)
-        combined_img = np.vstack((first_frame, grid_img))
+        combined_img = vstack((first_frame, grid_img))
 
         # Here the frame is resized for better visualization, while mantaining the ratio.
         if DISPLAY:
-            cv2.namedWindow('Object segmentation & grasping detection', cv2.WINDOW_KEEPRATIO)
-            cv2.imshow('Object segmentation & grasping detection', combined_img)
-            cv2.resizeWindow('Object segmentation & grasping detection', 1280, 720)
-            cv2.waitKey(1)
+            namedWindow('Object segmentation & grasping detection', WINDOW_KEEPRATIO)
+            imshow('Object segmentation & grasping detection', combined_img)
+            resizeWindow('Object segmentation & grasping detection', 1280, 720)
+            waitKey(1)
 
         # Save current frame as (i-2)th frame
-        frame_i_2 = copy.deepcopy(first_frame)
-        depth_frame_i_2 = copy.deepcopy(first_depth_frame)
+        frame_i_2 = deepcopy(first_frame)
+        depth_frame_i_2 = deepcopy(first_depth_frame)
 
         # Send the (i-2)th frame to the Seg8
         my_seg8.set_frame_to_seg(frame_i_2)
-        handsData_i_2 = copy.deepcopy(handTracker.getHandsData(pipeline.getManagerScriptOutput())) # frame (i-2)th
+        handsData_i_2 = deepcopy(handTracker.getHandsData(pipeline.getManagerScriptOutput())) # frame (i-2)th
 
         # Take next frame and save it as (i-1)th frame
-        frame_i_1 = copy.deepcopy(pipeline.getFrame())
-        depth_frame_i_1 = copy.deepcopy(pipeline.getDepthFrame())
+        frame_i_1 = deepcopy(pipeline.getFrame())
+        depth_frame_i_1 = deepcopy(pipeline.getDepthFrame())
 
         # Wait for YOLOv8-seg to generate results
-        result_i_2 = copy.deepcopy(my_seg8.get_yolo_seg_result()) # blocking behaviour
+        result_i_2 = deepcopy(my_seg8.get_yolo_seg_result()) # blocking behaviour
 
         # Send (i-1)th frame to Seg8
         my_seg8.set_frame_to_seg(frame_i_1)
-        handsData_i_1 = copy.deepcopy(handTracker.getHandsData(pipeline.getManagerScriptOutput())) # frame (i-1)th
+        handsData_i_1 = deepcopy(handTracker.getHandsData(pipeline.getManagerScriptOutput())) # frame (i-1)th
 
         # Start post processing on (i-2)th frame
         if DISPLAY:
@@ -233,7 +233,7 @@ if __name__ == '__main__':
             hand_obj_dist = "-"
 
             # Take results from Seg8 at (i-1)th frame
-            result_i_1 = copy.deepcopy(my_seg8.get_yolo_seg_result()) # blocking
+            result_i_1 = deepcopy(my_seg8.get_yolo_seg_result()) # blocking
 
             # Send (i)th frame to Seg8
             my_seg8.set_frame_to_seg(frame_i) # update (i)th frame, non-blocking
@@ -249,7 +249,7 @@ if __name__ == '__main__':
 
             if DISPLAY:
                 # Take (i-2)th post-processed frame
-                annotated_frame_i_2, masks_indices_i_2, mask_contour_indices_i_2, inference_class_list_i_2 = copy.deepcopy(my_seg8.get_seg_post_processing()) # blocking
+                annotated_frame_i_2, masks_indices_i_2, mask_contour_indices_i_2, inference_class_list_i_2 = deepcopy(my_seg8.get_seg_post_processing()) # blocking
                 # Start post processing on (i-1)th frame
                 my_seg8.start_seg_post_processing(frame_i_1, result_i_1)
             else:
@@ -261,8 +261,8 @@ if __name__ == '__main__':
                 if result_i_1 is not None and result_i_1.masks is not None:
                     for mask in result_i_1.masks:
                         for xy in mask.xy:
-                            contour = xy.astype(np.int32).reshape(-1, 1, 2)
-                            contour_yx = np.zeros((contour.shape[0],2), dtype=np.int32)
+                            contour = xy.astype(int32).reshape(-1, 1, 2)
+                            contour_yx = zeros((contour.shape[0],2), dtype=int32)
                             contour_yx[:,0] = contour[:, 0, 1]
                             contour_yx[:,1] = contour[:, 0, 0]
                             mask_contour_indices_i_2.append([contour_yx])
@@ -283,20 +283,20 @@ if __name__ == '__main__':
                             obj_spatial_arr[moving_avarage_index, :] = selected_obj_spatial
 
                             # Dealing with NaN values
-                            hand_spatial_arr_without_nan_index = np.argwhere(~np.isnan(hand_spatial_arr)).reshape(-1)
+                            hand_spatial_arr_without_nan_index = argwhere(~isnan(hand_spatial_arr)).reshape(-1)
 
                             if hand_spatial_arr_without_nan_index.shape[0] > 0:
                                 hand_spatial_arr_without_nan = hand_spatial_arr[hand_spatial_arr_without_nan_index]
-                                hand_spatial_avarage = np.mean(hand_spatial_arr_without_nan, axis=0)
+                                hand_spatial_avarage = mean(hand_spatial_arr_without_nan, axis=0)
 
-                            obj_spatial_arr_without_nan_index = np.argwhere(~np.isnan(obj_spatial_arr)).reshape(-1)
+                            obj_spatial_arr_without_nan_index = argwhere(~isnan(obj_spatial_arr)).reshape(-1)
 
                             if obj_spatial_arr_without_nan_index.shape[0] > 0:
                                 obj_spatial_arr_without_nan = obj_spatial_arr[obj_spatial_arr_without_nan_index]
-                                obj_spatial_avarage = np.mean(obj_spatial_arr_without_nan, axis=0)
+                                obj_spatial_avarage = mean(obj_spatial_arr_without_nan, axis=0)
 
                             # Calculates the 3D norm (spatial distance) between hand and object
-                            hand_obj_dist = np.linalg.norm(hand_spatial_avarage - obj_spatial_avarage)
+                            hand_obj_dist = linalg.norm(hand_spatial_avarage - obj_spatial_avarage)
                             print("hand_obj_dist: ", hand_obj_dist)
 
                             if hand_obj_dist < hand_obj_dist_threshold:
@@ -309,8 +309,8 @@ if __name__ == '__main__':
                 else:
                     # Handle case when the hand is not grasping
                     grasping_status_arr[moving_avarage_index] = False
-                    hand_spatial_arr[moving_avarage_index, :] = [np.nan, np.nan, np.nan]
-                    obj_spatial_arr[moving_avarage_index, :] = [np.nan, np.nan, np.nan]
+                    hand_spatial_arr[moving_avarage_index, :] = [nan, nan, nan]
+                    obj_spatial_arr[moving_avarage_index, :] = [nan, nan, nan]
                 
                     # Update moving average index
                     moving_avarage_index = (moving_avarage_index + 1) % num_elements_moving_avarage
@@ -320,13 +320,13 @@ if __name__ == '__main__':
             
 
             # Calculate the moving average grasping status
-            if np.sum(grasping_status_arr) > num_elements_moving_avarage/2:
+            if sum(grasping_status_arr) > num_elements_moving_avarage/2:
                 if released:
                     last_grasped_obj_name = grasped_obj_name
                     last_obj_weight = obj_weight
                     # If the communication is ON, sends the weight to the exosuit
                     if EXO_COMM:
-                        communicator.send_weight(copy.deepcopy(obj_weight))
+                        communicator.send_weight(deepcopy(obj_weight))
                 released = False
                 grasping_status_avarage = True
             else:
@@ -346,14 +346,14 @@ if __name__ == '__main__':
                 grid_img = add_grid_img2(grasping_status_avarage, last_grasped_obj_name, last_obj_weight, fps, grid_height, grid_width, cell_height, cell_width)
 
                 # Stack the main frame and the grid image vertically
-                combined_img = np.vstack((frame_final, grid_img))
+                combined_img = vstack((frame_final, grid_img))
 
-                cv2.namedWindow('Object segmentation & grasping detection', cv2.WINDOW_KEEPRATIO)
-                cv2.imshow('Object segmentation & grasping detection', combined_img)
-                cv2.resizeWindow('Object segmentation & grasping detection', 1280, 720)
+                namedWindow('Object segmentation & grasping detection', WINDOW_KEEPRATIO)
+                imshow('Object segmentation & grasping detection', combined_img)
+                resizeWindow('Object segmentation & grasping detection', 1280, 720)
 
                 # Break the loop if 'q' key is pressed
-                if cv2.waitKey(10) == ord('q'):
+                if waitKey(10) == ord('q'):
                     break
             else:
                 print("fps: ", fps)
@@ -361,13 +361,13 @@ if __name__ == '__main__':
 
             # Update frames
             # frame (i-1) -> frame (i-2)
-            frame_i_2 = copy.deepcopy(frame_i_1)
-            depth_frame_i_2 = copy.deepcopy(depth_frame_i_1)
-            handsData_i_2 = copy.deepcopy(handsData_i_1)
+            frame_i_2 = deepcopy(frame_i_1)
+            depth_frame_i_2 = deepcopy(depth_frame_i_1)
+            handsData_i_2 = deepcopy(handsData_i_1)
             # frame (i) -> frame (i-1)
-            frame_i_1 = copy.deepcopy(frame_i)
-            depth_frame_i_1 = copy.deepcopy(depth_frame_i)
-            handsData_i_1 = copy.deepcopy(handsData_i)
+            frame_i_1 = deepcopy(frame_i)
+            depth_frame_i_1 = deepcopy(depth_frame_i)
+            handsData_i_1 = deepcopy(handsData_i)
             
 
     except KeyboardInterrupt:
@@ -382,4 +382,4 @@ if __name__ == '__main__':
     pipeline.exit()
     del pipeline
     del my_seg8
-    cv2.destroyAllWindows()
+    destroyAllWindows()

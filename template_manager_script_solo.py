@@ -6,8 +6,8 @@ In the following:
 rrn_ : normalized [0:1] coordinates in rotated rectangle coordinate systems 
 sqn_ : normalized [0:1] coordinates in squared input image
 """
-import marshal
-from math import sin, cos, atan2, pi, degrees, floor, dist
+from marshal import dumps
+from math import sin, cos, atan2, pi, degrees, floor
 
 # Placeholders for image dimensions and padding
 pad_h = ${_pad_h}
@@ -55,7 +55,7 @@ class BufferMgr:
 buffer_mgr = BufferMgr()
 
 def send_result(result):
-    result_serial = marshal.dumps(result)
+    result_serial = dumps(result)
     buffer = buffer_mgr(len(result_serial))  
     buffer.getData()[:] = result_serial  
     node.io['host'].send(buffer)

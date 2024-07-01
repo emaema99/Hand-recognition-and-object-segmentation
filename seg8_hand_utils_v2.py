@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
-import math
-import numpy as np
-import depthai as dai
+from math import tan, atan
+from numpy import deg2rad, isnan, array, copy, sum, zeros, argwhere, mean
+from depthai import CameraBoardSocket
 
 class HostSpatialsCalc:
     '''
@@ -17,10 +17,7 @@ class HostSpatialsCalc:
         1080p has the same FOV as 4k (it's 4k downscaled/binned).
         '''
         self.calibData = device.readCalibration() # Initialize the class with device calibration data
-        self.HFOV = np.deg2rad(self.calibData.getFov(dai.CameraBoardSocket(depth_data.getInstanceNum())))
-        # ci, w, h = self.calibData.getDefaultIntrinsics(dai.CameraBoardSocket.LEFT)
-        # self.HFOV = 2*math.atan((w/2)/ci[0][0])
-        # self.HFOV = np.rad2deg(1.218743397384473)
+        self.HFOV = deg2rad(self.calibData.getFov(CameraBoardSocket(depth_data.getInstanceNum()), useSpec=False))
 
         # Constants for depth processing
         self.DELTA = 5  # Take 10x10 depth pixels around point for depth averaging
@@ -51,7 +48,7 @@ class HostSpatialsCalc:
         return spatials, centroid
     # --------------------------------------------------------------------------------------------
 
-    def calc_squared_roi_spatials(self, depth_frame, roi, averaging_method = np.mean):
+    def calc_squared_roi_spatials(self, depth_frame, roi, averaging_method = mean):
         '''
         Calculate spatial coordinates for a squared region of interest (ROI) in the depth frame.
         '''
@@ -64,7 +61,7 @@ class HostSpatialsCalc:
         averageDepth = averaging_method(depthROI[inRange])
 
         # Calculate the centroid of the ROI
-        centroid = np.array([int((xmax + xmin) / 2), int((ymax + ymin) / 2)])
+        centroid = array([int((xmax + xmin) / 2), int((ymax + ymin) / 2)])
 
         # Calculate the middle of the depth image width and height
         midW = int(depth_frame.shape[1] / 2)
@@ -76,13 +73,13 @@ class HostSpatialsCalc:
         angle_x = self._calc_angle(depth_frame, bb_x_pos)
         angle_y = self._calc_angle(depth_frame, bb_y_pos)
 
-        # spatials = np.array([averageDepth, averageDepth * math.tan(angle_x), -averageDepth * math.tan(angle_y)])
-        spatials = np.array([averageDepth * math.tan(angle_x), -averageDepth * math.tan(angle_y), averageDepth])
+        # spatials = array([averageDepth, averageDepth * tan(angle_x), -averageDepth * tan(angle_y)])
+        spatials = array([averageDepth * tan(angle_x), -averageDepth * tan(angle_y), averageDepth])
 
         return spatials, centroid
     # --------------------------------------------------------------------------------------------
 
-    def calc_roi_spatials(self, depth_frame, roi_pixels, averaging_method = np.mean):
+    def calc_roi_spatials(self, depth_frame, roi_pixels, averaging_method = mean):
         '''
         Calculate spatial coordinates for an arbitrary region of interest (ROI) defined by a set of pixels in the depth frame.
         '''
@@ -91,8 +88,8 @@ class HostSpatialsCalc:
             return None, None
 
         # Copy depth frame and ROI pixels to avoid modifying original data
-        depth_frame_c = np.copy(depth_frame)
-        roi_pixels_c = np.copy(np.array(roi_pixels).reshape(-1,2))
+        depth_frame_c = copy(depth_frame)
+        roi_pixels_c = copy(array(roi_pixels).reshape(-1,2))
 
         # Extract depth values at the ROI pixels
         roi_depth_values = depth_frame_c[roi_pixels_c[:,0], roi_pixels_c[:,1]]
@@ -107,8 +104,8 @@ class HostSpatialsCalc:
         averageDepth = averaging_method(roi_depth_values_valid)
 
         # Calculate the centroid of the valid ROI pixels
-        centroid = np.array([int(np.sum(roi_pixels_in_range_valid[:,1]) / len(roi_pixels_in_range_valid[:,1])), #centroid[0]->pixel y, spatial x
-                             int(np.sum(roi_pixels_in_range_valid[:,0]) / len(roi_pixels_in_range_valid[:,0]))])#centroid[1]->pixel x, spatial y
+        centroid = array([int(sum(roi_pixels_in_range_valid[:,1]) / len(roi_pixels_in_range_valid[:,1])), #centroid[0]->pixel y, spatial x
+                             int(sum(roi_pixels_in_range_valid[:,0]) / len(roi_pixels_in_range_valid[:,0]))])#centroid[1]->pixel x, spatial y
 
         # Calculate the middle of the depth image width and height
         midW = int(depth_frame.shape[1] / 2) # colonne, spatial x
@@ -121,12 +118,12 @@ class HostSpatialsCalc:
         angle_y = self._calc_angle(depth_frame, bb_y_pos, self.HFOV)
 
         # Spatials = x,y,z info
-        spatials = np.array([averageDepth * math.tan(angle_x), -averageDepth * math.tan(angle_y), averageDepth])
+        spatials = array([averageDepth * tan(angle_x), -averageDepth * tan(angle_y), averageDepth])
 
         return spatials, centroid
     # --------------------------------------------------------------------------------------------
 
-    def calc_roi_each_point_spatials(self, depth_frame, roi_pixels, down_sampling=1, averaging_method = np.mean):
+    def calc_roi_each_point_spatials(self, depth_frame, roi_pixels, down_sampling=1, averaging_method = mean):
         '''
         Calculate spatial coordinates for each point in an ROI with optional down-sampling
         '''
@@ -134,8 +131,8 @@ class HostSpatialsCalc:
             return None, None
 
         # Copy depth frame and ROI pixels to avoid modifying original data
-        depth_frame_c = np.copy(depth_frame)
-        roi_pixels_c = np.copy(np.array(roi_pixels).reshape(-1,2))
+        depth_frame_c = copy(depth_frame)
+        roi_pixels_c = copy(array(roi_pixels).reshape(-1,2))
 
         # Extract depth values at the ROI pixels
         roi_depth_values = depth_frame_c[roi_pixels_c[:,0], roi_pixels_c[:,1]]
@@ -162,20 +159,20 @@ class HostSpatialsCalc:
         y_pos_arr = roi_pixels_in_range_downsampled[:,0] - midH
 
         # Calculate angles for each ROI pixel
-        x_angle_tan_arr = np.zeros(len(x_pos_arr))
-        y_angle_tan_arr = np.zeros(len(y_pos_arr))
+        x_angle_tan_arr = zeros(len(x_pos_arr))
+        y_angle_tan_arr = zeros(len(y_pos_arr))
 
         # calc angle tan
-        value = math.tan(self.HFOV / 2.0) / (depth_frame.shape[1] / 2.0)
+        value = tan(self.HFOV / 2.0) / (depth_frame.shape[1] / 2.0)
         x_angle_tan_arr = x_pos_arr * value
         y_angle_tan_arr = y_pos_arr * value
 
         # for i in range(len(y_angle_tan_arr)):
-        #     x_angle_tan_arr[i] = math.tan(self._calc_angle(depth_frame, x_pos_arr[i]))
-        #     y_angle_tan_arr[i] = math.tan(self._calc_angle(depth_frame, y_pos_arr[i]))
+        #     x_angle_tan_arr[i] = tan(self._calc_angle(depth_frame, x_pos_arr[i]))
+        #     y_angle_tan_arr[i] = tan(self._calc_angle(depth_frame, y_pos_arr[i]))
 
         # Calculate spatial coordinates for each ROI pixel
-        spatials = np.zeros([len(x_angle_tan_arr), 3])
+        spatials = zeros([len(x_angle_tan_arr), 3])
         spatials[:,0] = roi_depth_values_downsampled * x_angle_tan_arr
         spatials[:,1] = (roi_depth_values_downsampled * y_angle_tan_arr) * (-1)
         spatials[:,2] = roi_depth_values_downsampled
@@ -187,26 +184,26 @@ class HostSpatialsCalc:
         '''
         Calculate the angle for a given offset and horizontal field of view
         '''
-        return math.atan(math.tan(self.HFOV / 2.0) * offset / (frame.shape[1] / 2.0))
+        return atan(tan(self.HFOV / 2.0) * offset / (frame.shape[1] / 2.0))
     # --------------------------------------------------------------------------------------------
 
     def remove_nan_and_out_of_range_points(self, roi_depth_values, roi_pixels):
         '''
         Remove NaN and out-of-range depth values from ROI pixels.
         '''
-        indices_not_nan = np.argwhere(~np.isnan(roi_depth_values)).reshape(-1)
+        indices_not_nan = argwhere(~isnan(roi_depth_values)).reshape(-1)
         if indices_not_nan.shape[0] < 1:
             return None, None
         roi_depth_values_not_nan = roi_depth_values[indices_not_nan]
         roi_pixels_not_nan = roi_pixels[indices_not_nan,:]
 
-        indices_in_range_min = np.argwhere(roi_depth_values_not_nan > self.THRESH_LOW).reshape(-1)
+        indices_in_range_min = argwhere(roi_depth_values_not_nan > self.THRESH_LOW).reshape(-1)
         if indices_in_range_min.shape[0] < 1:
             return None, None
         roi_depth_values_in_range_min = roi_depth_values_not_nan[indices_in_range_min]
         roi_pixels_in_range_min = roi_pixels_not_nan[indices_in_range_min,:]
 
-        indices_in_range = np.argwhere(roi_depth_values_in_range_min < self.THRESH_HIGH).reshape(-1)
+        indices_in_range = argwhere(roi_depth_values_in_range_min < self.THRESH_HIGH).reshape(-1)
         if indices_in_range.shape[0] < 1:
             return None, None
         roi_depth_values_valid = roi_depth_values_in_range_min[indices_in_range]

@@ -4,8 +4,8 @@
 # Script to send data to the Arduino via WiFi with a TCP connection
 ####################################################################################################
 
-import socket
-import struct
+from socket import socket, AF_INET, SOCK_STREAM
+from struct import pack
 
 class ArduinoCommunicator:
     def __init__(self, ip='192.168.0.21', port=50000, buffer_size=1):
@@ -27,7 +27,7 @@ class ArduinoCommunicator:
         Establish a TCP connection to the Arduino.
         """
         print('Waiting for Simulink to start')
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket = socket(AF_INET, SOCK_STREAM)
         self.socket.setblocking(True)
         self.socket.connect((self.TCP_IP, self.TCP_PORT))
         print("Connection established!")
@@ -37,7 +37,7 @@ class ArduinoCommunicator:
         Send the weight data to the Arduino via TCP.
         Parameters: weight (float)
         """
-        msg = struct.pack('<f', weight)
+        msg = pack('<f', weight)
         self.socket.send(msg)
         print('Sent data:', weight)
 
