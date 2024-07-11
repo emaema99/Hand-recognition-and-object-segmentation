@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
 from cv2 import FONT_HERSHEY_SIMPLEX, LINE_AA, WINDOW_KEEPRATIO, putText, namedWindow, imshow, resizeWindow, waitKey, destroyAllWindows
-from numpy import uint8, inf, min, nan, int32, isnan, ndarray, linalg, bool_, vstack, argmin, argwhere, mean, sum, full, copy, zeros
+from numpy import uint8, inf, min, nan, int32, isnan, ndarray, linalg, bool_, array, vstack, argmin, argwhere, mean, sum, full, copy, zeros
 from time import time, sleep
 from copy import deepcopy
+from scipy import spatial
 
 from HandTrackerRendererV3 import HandTrackerRenderer
 from CustomPipeline2 import CustomPipeline
@@ -22,8 +23,10 @@ camera_fps = 15
 num_elements_moving_avarage = 15
 hand_obj_dist_threshold = 60 #[mm]
 down_sampling = 5
+black_pixel_threshold = 20
 
 DISPLAY = True
+SCALING = True
 EXO_COMM = False
 
 def add_grid_img(gesture_status, object_name, object_weight, fps, grid_height, grid_width, cell_height, cell_width):
@@ -103,6 +106,7 @@ def calc_distances(masks_pixels, depth_frame, hand_spatial):
         for i in range(len(masks_pixels)):
             # Calculate spatial data for each mask
             mask_spatial, mask_pixels_in_range = spatial_calc.calc_roi_each_point_spatials(depth_frame, masks_pixels[i], down_sampling)
+            # Filter to select only black pixels in the contour
 
             if isinstance(mask_spatial, ndarray):
                 mask_spatial = mask_spatial.reshape(-1,3)
@@ -129,9 +133,9 @@ def calc_distances(masks_pixels, depth_frame, hand_spatial):
                             min_dist_index = deepcopy(mask_min_dist_index)
 
                 if min_index is not None and min_dist_index is not None:
-                    return min_index, masks_spatial[min_index][min_dist_index,:], min_dist
+                    return min_index, masks_spatial[min_index][min_dist_index,:], min_dist, masks_spatial
 
-    return None, [nan, nan, nan], None
+    return None, [nan, nan, nan], None, None
 
 if __name__ == '__main__':
     '''
@@ -245,7 +249,6 @@ if __name__ == '__main__':
                 hand = handsData_i_2[0]
                 grasping_status = hand.is_grasping
                 hand_spatial = hand.xyz
-                
 
             if DISPLAY:
                 # Take (i-2)th post-processed frame
@@ -266,13 +269,12 @@ if __name__ == '__main__':
                             contour_yx[:,0] = contour[:, 0, 1]
                             contour_yx[:,1] = contour[:, 0, 0]
                             mask_contour_indices_i_2.append([contour_yx])
-                               
 
             # Calculates distance from the palm of the hand to the closest pixel of the object mask in (i-2)th frame
             if handsData_i_2 and hand_spatial is not None:
                 if grasping_status:
                     if len(mask_contour_indices_i_2) > 0:
-                        selected_index, selected_obj_spatial, selected_dist = calc_distances(mask_contour_indices_i_2, depth_frame_i_2, hand_spatial)
+                        selected_index, selected_obj_spatial, selected_dist, selected_contour_spatials = calc_distances(mask_contour_indices_i_2, depth_frame_i_2, hand_spatial)
                         if selected_index is not None and selected_index >= 0 and selected_index < len(inference_class_list_i_2):
                             grasped_obj_name = my_seg8.get_class_names()[inference_class_list_i_2[selected_index]]
                             obj_weight = my_seg8.get_class_weight()[inference_class_list_i_2[selected_index]]
@@ -306,6 +308,33 @@ if __name__ == '__main__':
 
                             # Update moving average index
                             moving_avarage_index = (moving_avarage_index + 1) % num_elements_moving_avarage
+
+                            if SCALING:
+                                selected_contour_spatials_flat = []
+                                selected_contour_spatials_np = []
+
+                                if grasped_obj_name == "Drill":
+                                    if selected_contour_spatials is not None and len(selected_contour_spatials) > 0:
+                                        try:
+                                            # Flatten the list of arrays to ensure homogeneity
+                                            selected_contour_spatials_flat = [item for sublist in selected_contour_spatials for item in sublist]
+                                            selected_contour_spatials_np = array(selected_contour_spatials_flat)
+                                            selected_contour_spatials_ordered = spatial.ConvexHull(selected_contour_spatials_np)
+                                            print("Area: ", int(selected_contour_spatials_ordered.area / 100), "cm^2")
+                                        except TypeError as e:
+                                            print(f"Error while flattening selected_contour_spatials: {e}")
+
+                                elif grasped_obj_name == "Crimper" or grasped_obj_name == "Hammer":
+                                    selected_contour_spatials
+                                    if selected_contour_spatials is not None and len(selected_contour_spatials) > 0:
+                                        try:
+                                            selected_contour_spatials_flat = [item for sublist in selected_contour_spatials for item in sublist]
+                                            selected_contour_spatials_np = array(selected_contour_spatials_flat)
+                                            selected_contour_spatials_ordered = spatial.ConvexHull(selected_contour_spatials_np)
+                                            print("Area: ", int(selected_contour_spatials_ordered.area / 100), "cm^2")
+                                        except TypeError as e:
+                                            print(f"Error while flattening selected_contour_spatials: {e}")
+
                 else:
                     # Handle case when the hand is not grasping
                     grasping_status_arr[moving_avarage_index] = False
@@ -316,8 +345,6 @@ if __name__ == '__main__':
                     moving_avarage_index = (moving_avarage_index + 1) % num_elements_moving_avarage
 
             start_time, frame_count, fps = calc_fps(start_time, frame_count, fps)
-
-            
 
             # Calculate the moving average grasping status
             if sum(grasping_status_arr) > num_elements_moving_avarage/2:
@@ -358,7 +385,6 @@ if __name__ == '__main__':
             else:
                 print("fps: ", fps)
 
-
             # Update frames
             # frame (i-1) -> frame (i-2)
             frame_i_2 = deepcopy(frame_i_1)
@@ -368,7 +394,6 @@ if __name__ == '__main__':
             frame_i_1 = deepcopy(frame_i)
             depth_frame_i_1 = deepcopy(depth_frame_i)
             handsData_i_1 = deepcopy(handsData_i)
-            
 
     except KeyboardInterrupt:
         print("Interrupted by user")
