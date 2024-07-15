@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
-from cv2 import FONT_HERSHEY_SIMPLEX, LINE_AA, WINDOW_KEEPRATIO, COLOR_BGR2GRAY, putText, namedWindow, imshow, resizeWindow, waitKey, destroyAllWindows, cvtColor
-from numpy import uint8, inf, min, nan, int32, isnan, ndarray, linalg, bool_, array, all, vstack, argmin, argwhere, mean, sum, full, copy, zeros
+from cv2 import FONT_HERSHEY_SIMPLEX, LINE_AA, WINDOW_KEEPRATIO, putText, namedWindow, imshow, resizeWindow, waitKey, destroyAllWindows
+from numpy import uint8, inf, min, nan, int32, isnan, ndarray, linalg, bool_, argwhere, vstack, argmin, argwhere, mean, sum, full, copy, zeros, array
 from time import time, sleep
 from copy import deepcopy
-from scipy import spatial
+from scipy.spatial import ConvexHull
 
 from HandTrackerRendererV3 import HandTrackerRenderer
 from CustomPipeline2 import CustomPipeline
@@ -23,7 +23,7 @@ camera_fps = 15
 num_elements_moving_avarage = 15
 hand_obj_dist_threshold = 60 #[mm]
 down_sampling = 5
-black_pixel_threshold = 100
+black_pixel_threshold = 80
 
 DISPLAY = True
 SCALING = True
@@ -99,46 +99,31 @@ def draw_mask(frame_to_annotate, mask, class_type):
 
     return annotated_frame
 
-def calc_distances(masks_pixels, depth_frame, hand_spatial, rgb_frame, black_pixel_threshold):
-    # Note that OpenCV uses (y, x) instead of (x, y)
+def calc_distances(masks_pixels, depth_frame, hand_spatial):
     if len(masks_pixels) > 0 or hand_spatial is not None:
-        masks_spatial = []
+        masks_spatial_in_range = []
         masks_pixels_in_range = []
-        black_pixels = []
-        masks_pixel_in_range_value = []
-        # gray = cvtColor(rgb_frame, COLOR_BGR2GRAY)
         for i in range(len(masks_pixels)):
             # Calculate spatial data (x,y,z) for each mask-contour pixel in world coordinates
-            mask_spatial, mask_pixels_in_range = spatial_calc.calc_roi_each_point_spatials(depth_frame, masks_pixels[i], down_sampling)
-            # mask_pixels_in_range is a 2D array (x,y) in pixel of mask contour
-            # Select just the black pixels in the contour
-            if mask_pixels_in_range is not None:
-                for (x,y) in mask_pixels_in_range:
-                    masks_pixel_in_range_value = rgb_frame[x,y]
-                    # Check if the pixel is black
-                    if all(masks_pixel_in_range_value < black_pixel_threshold):
-                        black_pixels.append((x,y))
-                        print(black_pixels)
-                    # TODO: mapping 2d pixels with 3d coords
-                    # mask_spatial = mask_spatial[black_pixels]
+            mask_spatial_in_range, mask_pixels_in_range = spatial_calc.calc_roi_each_point_spatials(depth_frame, masks_pixels[i], down_sampling)
 
-            if isinstance(mask_spatial, ndarray):
-                mask_spatial = mask_spatial.reshape(-1,3)
+            if isinstance(mask_spatial_in_range, ndarray):
+                mask_spatial_in_range = mask_spatial_in_range.reshape(-1,3)
 
-            masks_spatial.append(mask_spatial)
+            masks_spatial_in_range.append(mask_spatial_in_range)
             masks_pixels_in_range.append(mask_pixels_in_range)
 
         # Process hand data (if available and if a hand was detected)
         if grasping_status and hand_spatial is not None:
-            if len(masks_spatial) > 0:
+            if len(masks_spatial_in_range) > 0:
                 min_dist = inf
                 min_dist_index = None
                 min_index = None
-                for i in range(len(masks_spatial)):
-                    if masks_spatial[i] is not None and isinstance(masks_spatial[i], ndarray):
-                        hand_spatial_matr = full(masks_spatial[i].shape, hand_spatial)
-                        # Calculates the distance between the palm and the closest pixel of the mask.
-                        dists = linalg.norm(hand_spatial_matr - masks_spatial[i], axis = 1)
+                for i in range(len(masks_spatial_in_range)):
+                    if masks_spatial_in_range[i] is not None and isinstance(masks_spatial_in_range[i], ndarray):
+                        hand_spatial_matr = full(masks_spatial_in_range[i].shape, hand_spatial)
+                        # Calculates the distance between the palm and the closest pixel of the mask
+                        dists = linalg.norm(hand_spatial_matr - masks_spatial_in_range[i], axis = 1)
                         if dists.size > 0:
                             mask_min_dist = min(dists)
                             if mask_min_dist < min_dist:
@@ -148,33 +133,45 @@ def calc_distances(masks_pixels, depth_frame, hand_spatial, rgb_frame, black_pix
                                 min_dist_index = deepcopy(mask_min_dist_index)
 
                 if min_index is not None and min_dist_index is not None:
-                    return min_index, masks_spatial[min_index][min_dist_index,:], min_dist, masks_spatial, black_pixels
+                    return min_index, masks_spatial_in_range[min_index][min_dist_index,:], min_dist, masks_pixels_in_range[min_index]
 
-    return None, [nan, nan, nan], None, None, None
+    return None, [nan, nan, nan], None, [nan, nan]
 
-def dark_pixels_area(selected_dark_pixels):
-    if selected_dark_pixels is not None and len(selected_dark_pixels) > 0:
+def calc_area(selected_contour_pixels, selected_contour_spatials, grasped_object, rgb_frame, black_pixel_threshold):
+    dark_contour_pixel_indices = []
+
+    if grasped_object in ["Hammer", "Crimper"]:
+        if selected_contour_pixels is not None:
+            # Extract the RGB values at the specified coordinates
+            selected_contour_pixels = array(selected_contour_pixels)
+            # print(selected_contour_pixels)
+            pixel_values = rgb_frame[selected_contour_pixels[:, 0], selected_contour_pixels[:, 1]]  # Assuming selected_contour_pixels is in (x, y) format
+
+            # Find indices where pixel intensity is below the black_pixel_threshold
+            dark_contour_pixel_indices = argwhere((pixel_values < black_pixel_threshold).any(axis=-1))
+            print("dark_contour_pixel_indices: ", dark_contour_pixel_indices)
+            print(selected_contour_spatials)
+            selected_contour_spatials = selected_contour_spatials[dark_contour_pixel_indices]
+
+    if selected_contour_spatials is not None and len(selected_contour_spatials) > 0:
         try:
             # Flatten the list of arrays to ensure homogeneity
-            selected_dark_pixels_flat = [item for sublist in selected_dark_pixels for item in sublist]
+            selected_contour_spatials_flat = [item for sublist in selected_contour_spatials for item in sublist]
             # Convert to numpy array, ensuring the correct shape
-            selected_dark_pixels_np = array(selected_dark_pixels_flat).reshape(-1, 2)
-            
-            # Debugging: Check the shape of the numpy array
-            print(f"Shape of selected_dark_pixels_np: {selected_dark_pixels_np.shape}")
+            selected_contour_spatials_np = array(selected_contour_spatials_flat).reshape(-1, 2)
+            print(f"Shape of selected_contour_spatials_np: {selected_contour_spatials_np.shape}")
             
             # Check if there are enough points to form a convex hull
-            if selected_dark_pixels_np.shape[0] < 3:
+            if selected_contour_spatials_np.shape[0] < 3:
                 print("Not enough points to form a convex hull")
                 return
             
-            # Calculate convex hull
-            selected_dark_pixels_ordered = spatial.ConvexHull(selected_dark_pixels_np)
-            
-            # Print the area
-            print("Area: ", int(selected_dark_pixels_ordered.area / 100), "cm^2")
+            # Calculate convex hull and area
+            selected_contour_spatials_ordered = ConvexHull(selected_contour_spatials_np)
+            print("Area: ", int(selected_contour_spatials_ordered.area / 100), "cm^2")
+
         except Exception as e:
-            print(f"Error while processing selected_dark_pixels: {e}")
+            print(f"Error while processing selected_contour_spatials: {e}")
 
 if __name__ == '__main__':
     '''
@@ -313,7 +310,8 @@ if __name__ == '__main__':
             if handsData_i_2 and hand_spatial is not None:
                 if grasping_status:
                     if len(mask_contour_indices_i_2) > 0:
-                        selected_index, selected_obj_spatial, selected_dist, selected_contour_spatials, selected_dark_pixels = calc_distances(mask_contour_indices_i_2, depth_frame_i_2, hand_spatial, frame_i_2, black_pixel_threshold)
+########################################################################################################################################################################
+                        selected_index, selected_obj_spatial, selected_dist, selected_contour_pixels = calc_distances(mask_contour_indices_i_2, depth_frame_i_2, hand_spatial)
                         if selected_index is not None and selected_index >= 0 and selected_index < len(inference_class_list_i_2):
                             grasped_obj_name = my_seg8.get_class_names()[inference_class_list_i_2[selected_index]]
                             obj_weight = my_seg8.get_class_weight()[inference_class_list_i_2[selected_index]]
@@ -349,15 +347,8 @@ if __name__ == '__main__':
                             moving_avarage_index = (moving_avarage_index + 1) % num_elements_moving_avarage
 
                             if SCALING:
-                                selected_dark_pixels_flat = []
-                                selected_dark_pixels_np = []
-
-                                if grasped_obj_name == "Drill":
-                                    dark_pixels_area(selected_dark_pixels)
-
-                                elif grasped_obj_name in ["Crimper", "Hammer"]:
-                                    dark_pixels_area(selected_dark_pixels)
-
+                                calc_area(selected_contour_pixels, selected_obj_spatial, grasped_obj_name, frame_i_2, black_pixel_threshold)
+##########################################################################################################################################################
                 else:
                     # Handle case when the hand is not grasping
                     grasping_status_arr[moving_avarage_index] = False
