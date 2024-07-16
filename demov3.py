@@ -23,7 +23,7 @@ camera_fps = 15
 num_elements_moving_avarage = 15
 hand_obj_dist_threshold = 60 #[mm]
 down_sampling = 5
-black_pixel_threshold = 80
+black_pixel_threshold = 50
 
 DISPLAY = True
 SCALING = True
@@ -133,39 +133,34 @@ def calc_distances(masks_pixels, depth_frame, hand_spatial):
                                 min_dist_index = deepcopy(mask_min_dist_index)
 
                 if min_index is not None and min_dist_index is not None:
-                    return min_index, masks_spatial_in_range[min_index][min_dist_index,:], min_dist, masks_pixels_in_range[min_index]
+                    return min_index, masks_spatial_in_range[min_index][min_dist_index,:], min_dist, masks_pixels_in_range[min_index], masks_spatial_in_range[min_index]
 
-    return None, [nan, nan, nan], None, [nan, nan]
+    return None, [nan, nan, nan], None, [nan, nan], [nan, nan, nan]
 
 def calc_area(selected_contour_pixels, selected_contour_spatials, grasped_object, rgb_frame, black_pixel_threshold):
     dark_contour_pixel_indices = []
+    img = deepcopy(rgb_frame)
 
     if grasped_object in ["Hammer", "Crimper"]:
         if selected_contour_pixels is not None:
-            # Extract the RGB values at the specified coordinates
             selected_contour_pixels = array(selected_contour_pixels)
-            # print(selected_contour_pixels)
-            pixel_values = rgb_frame[selected_contour_pixels[:, 0], selected_contour_pixels[:, 1]]  # Assuming selected_contour_pixels is in (x, y) format
-
-            # Find indices where pixel intensity is below the black_pixel_threshold
+            # Extract the RGB values at the specified coordinates, assuming selected_contour_pixels is in (x, y) format
+            pixel_values = img[selected_contour_pixels[:, 0], selected_contour_pixels[:, 1]]
+            # Find indices where pixel intensity is below the black_pixel_threshold (for any RGB channel)
             dark_contour_pixel_indices = argwhere((pixel_values < black_pixel_threshold).any(axis=-1))
-            print("dark_contour_pixel_indices: ", dark_contour_pixel_indices)
-            print(selected_contour_spatials)
+            # print("dark_contour_pixel_indices:\n", dark_contour_pixel_indices)
             selected_contour_spatials = selected_contour_spatials[dark_contour_pixel_indices]
+            # Ensure we have enough points to proceed
+            if len(selected_contour_spatials) < 4:
+                print("Not enough points to form a convex hull!")
+                return
 
     if selected_contour_spatials is not None and len(selected_contour_spatials) > 0:
         try:
             # Flatten the list of arrays to ensure homogeneity
             selected_contour_spatials_flat = [item for sublist in selected_contour_spatials for item in sublist]
             # Convert to numpy array, ensuring the correct shape
-            selected_contour_spatials_np = array(selected_contour_spatials_flat).reshape(-1, 2)
-            print(f"Shape of selected_contour_spatials_np: {selected_contour_spatials_np.shape}")
-            
-            # Check if there are enough points to form a convex hull
-            if selected_contour_spatials_np.shape[0] < 3:
-                print("Not enough points to form a convex hull")
-                return
-            
+            selected_contour_spatials_np = array(selected_contour_spatials_flat).reshape(-1, 3)
             # Calculate convex hull and area
             selected_contour_spatials_ordered = ConvexHull(selected_contour_spatials_np)
             print("Area: ", int(selected_contour_spatials_ordered.area / 100), "cm^2")
@@ -311,7 +306,7 @@ if __name__ == '__main__':
                 if grasping_status:
                     if len(mask_contour_indices_i_2) > 0:
 ########################################################################################################################################################################
-                        selected_index, selected_obj_spatial, selected_dist, selected_contour_pixels = calc_distances(mask_contour_indices_i_2, depth_frame_i_2, hand_spatial)
+                        selected_index, selected_obj_spatial, selected_dist, selected_contour_pixels, selected_contour_spatials = calc_distances(mask_contour_indices_i_2, depth_frame_i_2, hand_spatial)
                         if selected_index is not None and selected_index >= 0 and selected_index < len(inference_class_list_i_2):
                             grasped_obj_name = my_seg8.get_class_names()[inference_class_list_i_2[selected_index]]
                             obj_weight = my_seg8.get_class_weight()[inference_class_list_i_2[selected_index]]
@@ -336,7 +331,8 @@ if __name__ == '__main__':
 
                             # Calculates the 3D norm (spatial distance) between hand and object
                             hand_obj_dist = linalg.norm(hand_spatial_avarage - obj_spatial_avarage)
-                            print("hand_obj_dist: ", hand_obj_dist)
+                            if hand_obj_dist is not None and hand_obj_dist > 0:
+                                print("hand_obj_dist: ", int(hand_obj_dist/10), "cm")
 
                             if hand_obj_dist < hand_obj_dist_threshold:
                                 grasping_status_arr[moving_avarage_index] = True
@@ -347,7 +343,7 @@ if __name__ == '__main__':
                             moving_avarage_index = (moving_avarage_index + 1) % num_elements_moving_avarage
 
                             if SCALING:
-                                calc_area(selected_contour_pixels, selected_obj_spatial, grasped_obj_name, frame_i_2, black_pixel_threshold)
+                                calc_area(selected_contour_pixels, selected_contour_spatials, grasped_obj_name, frame_i_2, black_pixel_threshold)
 ##########################################################################################################################################################
                 else:
                     # Handle case when the hand is not grasping
