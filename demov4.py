@@ -192,13 +192,13 @@ if __name__ == '__main__':
     released = True
     moving_avarage_index = 0
 
-    # Initialize communication with the exosuit (if enabled).
+    # Initialize communication with the exosuit (if enabled)
     if EXO_COMM:
         communicator = ArduinoCommunicator(ip='192.168.0.21', port=50000)
         communicator.connect()
 
     try:
-        # Capture depth and RGB frame from the camera pipeline.
+        # Capture depth and RGB frame from the camera pipeline
         first_frame = pipeline.getFrame()
         first_depth_frame = pipeline.getDepthFrame() # UINT16 - mm
 
@@ -207,7 +207,7 @@ if __name__ == '__main__':
             first_depth_frame = pipeline.getDepthFrame()
             sleep(0.1)
 
-        # Sets the grid and cells dimensions, depending on the frame shape.
+        # Sets the grid and cells dimensions, depending on the frame shape
         grid_height = 100
         grid_width = first_frame.shape[1]
         grid_img = zeros((grid_height, grid_width, 3), dtype=uint8)
@@ -216,7 +216,7 @@ if __name__ == '__main__':
         grid_img = add_grid_img("Not Grasping", "-", "-", "0", grid_height, grid_width, cell_height, cell_width)
         combined_img = vstack((first_frame, grid_img))
 
-        # Here the frame is resized for better visualization, while mantaining the ratio.
+        # Here the frame is resized for better visualization, while mantaining the ratio
         if DISPLAY:
             namedWindow('Object segmentation & grasping detection', WINDOW_KEEPRATIO)
             imshow('Object segmentation & grasping detection', combined_img)
