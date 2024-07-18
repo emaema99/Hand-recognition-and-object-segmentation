@@ -266,7 +266,7 @@ class CustomPipeline:
 
 		left.out.link(stereo.left) # Connect Left Stero Camera to the Stero Node
 		right.out.link(stereo.right) # Connect Right Stero Camera to the Stero Node
-		stereo.depth.link(spatial_location_calculator.inputDepth) # Connect Left Stero Camera to the Stero Node
+		stereo.depth.link(spatial_location_calculator.inputDepth)
 		manager_script.outputs['spatial_location_config'].link(spatial_location_calculator.inputConfig) # Set by connection Spatial Location Configuration node
 		spatial_location_calculator.out.link(manager_script.inputs['spatial_data']) # Connect spatial_location Data to Manager Script Spatial Data section
 

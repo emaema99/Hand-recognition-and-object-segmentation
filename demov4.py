@@ -1,5 +1,3 @@
-
-
 #!/usr/bin/env python3
 
 from cv2 import FONT_HERSHEY_SIMPLEX, LINE_AA, WINDOW_KEEPRATIO, putText, namedWindow, imshow, resizeWindow, waitKey, destroyAllWindows
@@ -150,10 +148,6 @@ def calc_area(selected_contour_pixels, selected_contour_spatials, grasped_object
             # Find indices where pixel intensity is below the black_pixel_threshold (for any RGB channel)
             dark_contour_pixel_indices = argwhere((pixel_values < black_pixel_threshold).any(axis=-1))
             selected_contour_spatials = selected_contour_spatials[dark_contour_pixel_indices]
-            # Ensure we have enough points to proceed
-            if len(selected_contour_spatials) < 4:
-                print("Not enough points to form a convex hull!")
-                return
 
     if selected_contour_spatials is not None and len(selected_contour_spatials) > 0:
         try:

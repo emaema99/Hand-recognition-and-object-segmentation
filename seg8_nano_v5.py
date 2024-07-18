@@ -250,17 +250,3 @@ class Seg8:
 		'''
 		return self.__obj_masks_contour_indices
 	# ---------------------------------------------------------------------------------------------------
-
-	# deprecated
-	def update(self, frame, depth_frame):
-		'''
-		This function must be called in a loop
-		'''
-		# Update the current frame and depth frame
-		self.__frame = frame
-		self.__depth_frame = depth_frame
-
-		# Signal that a new frame is ready
-		if self.__frame is not None and self.__depth_frame is not None:
-			self.__new_frame_ready = True
-	# ---------------------------------------------------------------------------------------------------
