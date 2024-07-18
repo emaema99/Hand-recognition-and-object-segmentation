@@ -6,22 +6,28 @@ import pyny3d.geoms as pyny
 from seg8_nano_v5 import Seg8
 from seg8_hand_utils_v2 import HostSpatialsCalc
 
+black_pixel_threshold = 60
+
 if __name__ == '__main__':
 
+    # Create pipeline
+    device = dai.Device()
     pipeline = dai.Pipeline()
-    device = dai.Device(pipeline)
 
     # Define a source
-    cam_rgb = pipeline.createColorCamera()
+    cam_rgb = pipeline.create(dai.node.ColorCamera)
     cam_rgb.setPreviewSize(1280, 720)
+    cam_rgb.setColorOrder(dai.ColorCameraProperties.ColorOrder.RGB)
     cam_rgb.setInterleaved(False)
     cam_rgb.setBoardSocket(dai.CameraBoardSocket.CAM_A)
     cam_rgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1080_P)
-    cam_rgb.initialControl.setManualFocus(55) # RGB needs fixed focus to properly align with depth
+    calib_data = device.readCalibration()
+    calib_lens_pos = calib_data.getLensPosition(dai.CameraBoardSocket.CAM_A)
+    cam_rgb.initialControl.setManualFocus(calib_lens_pos)
 
-    left = pipeline.createMonoCamera()
-    right = pipeline.createMonoCamera()
-    stereo = pipeline.createStereoDepth()
+    left = pipeline.create(dai.node.MonoCamera)
+    right = pipeline.create(dai.node.MonoCamera)
+    stereo = pipeline.create(dai.node.StereoDepth)
 
     left.setBoardSocket(dai.CameraBoardSocket.CAM_B)
     left.setCamera("left")
@@ -33,31 +39,31 @@ if __name__ == '__main__':
 
     stereo.setDefaultProfilePreset(dai.node.StereoDepth.PresetMode.HIGH_DENSITY)
     stereo.initialConfig.setConfidenceThreshold(255)
-    stereo.setLeftRightCheck(True) # LR-check is required for depth alignment
+    stereo.setLeftRightCheck(True)
     stereo.setDepthAlign(dai.CameraBoardSocket.CAM_A)
     stereo.setSubpixel(False)
 
     spatial_location_calculator = pipeline.createSpatialLocationCalculator()
     spatial_location_calculator.inputConfig.setWaitForMessage(True)
+    spatial_location_calculator.inputDepth.setBlocking(False)
+    spatial_location_calculator.inputDepth.setQueueSize(1)
 
-    # Create output
-    xout_rgb = pipeline.createXLinkOut()
-    xout_rgb.setStreamName("rgb")
-    cam_rgb.preview.link(xout_rgb.input)
+    # Create output links
+    cam_out = pipeline.create(dai.node.XLinkOut)
+    cam_out.setStreamName("rgb")
+    cam_out.input.setQueueSize(1)
+    cam_out.input.setBlocking(False)
+    cam_rgb.preview.link(cam_out.input)
 
-    stereo_out = pipeline.createXLinkOut()
+    stereo_out = pipeline.create(dai.node.XLinkOut)
     stereo_out.setStreamName("stereo")
+    stereo_out.input.setQueueSize(1)
+    stereo_out.input.setBlocking(False)
     stereo.depth.link(stereo_out.input)
 
-    left.out.link(stereo.left) # Connect Left Stero Camera to the Stero Node
-    right.out.link(stereo.right) # Connect Right Stero Camera to the Stero Node
+    left.out.link(stereo.left)
+    right.out.link(stereo.right)
     stereo.depth.link(spatial_location_calculator.inputDepth)
-
-    # Connect and start the pipeline
-    rgb_queue = device.getOutputQueue(name="rgb", maxSize=1, blocking=True)
-    stereo_queue = device.getOutputQueue(name = "stereo", maxSize=1, blocking=True)
-
-    spatial_calc = HostSpatialsCalc(device, stereo_queue.get())
 
     # Load the YOLOv8-seg model
     path_to_yolo = "/home/ema/Desktop/depthai-hand-segmentation/models/best_nano8.pt"
@@ -67,49 +73,73 @@ if __name__ == '__main__':
     # Initialize the area array
     calculated_areas = np.array((0))
 
-    cv2.namedWindow("Seg8", cv2.WINDOW_NORMAL)
+    device.startPipeline(pipeline)
 
-    while True:
-        rgb_msg = rgb_queue.get()
-        depth_msg = stereo_queue.get()
-        if rgb_msg is None and depth_msg is None:
-            print("No frame received!")
-            continue
+    with device:
+        # Connect and start the pipeline
+        rgb_queue = device.getOutputQueue(name="rgb", maxSize=1, blocking=False)
+        stereo_queue = device.getOutputQueue(name="stereo", maxSize=1, blocking=False)
+        spatial_calc = HostSpatialsCalc(device, stereo_queue.get())
 
-        frame = rgb_msg.getCvFrame()
-        depth_frame = depth_msg.getFrame()
-        if frame is None:
-            print("Frame is empty!")
-            continue
-        elif depth_frame is None:
-            print("Depth is empty!")
+        try:
+            cv2.namedWindow('Seg8', cv2.WINDOW_KEEPRATIO)
+            cv2.resizeWindow('Seg8', 1280, 720)
 
-        print("Frame received. Shape:", frame.shape)
+            while True:
+                rgb_msg = rgb_queue.get()
+                frame = rgb_msg.getCvFrame() if rgb_msg is not None else None
+                depth_msg = stereo_queue.get()
+                depth_frame = depth_msg.getFrame() if depth_msg is not None else None
 
-        # Model prediction
-        my_seg8.set_frame_to_seg(frame) 
-        seg_result = my_seg8.get_yolo_seg_result() # blocking
-        my_seg8.start_seg_post_processing(frame, seg_result)
-        annotated_frame, obj_masks_indices, obj_masks_contour_indices, inference_class_list = my_seg8.get_seg_post_processing()
-        #my_seg8.get_class_names()[
-        #my_seg8.get_class_weight()[
-        print("Model prediction completed")
+                # Model prediction
+                my_seg8.set_frame_to_seg(frame) 
+                seg_result = my_seg8.get_yolo_seg_result() # blocking
+                my_seg8.start_seg_post_processing(frame, seg_result)
+                annotated_frame, obj_masks_indices, obj_masks_contour_indices, inference_class_list = my_seg8.get_seg_post_processing()
+                print(inference_class_list)
 
-        mask_spatial_in_range, mask_pixels_in_range = spatial_calc.calc_roi_each_point_spatials(depth_frame, obj_masks_contour_indices, 1)
+                selected_contour_spatials, selected_contour_pixels = spatial_calc.calc_roi_each_point_spatials(depth_frame, obj_masks_contour_indices, 1)
 
-        current_area = []
-        
-        calculated_areas = np.append(calculated_areas, current_area)
+                dark_contour_pixel_indices = []
+                current_area = []
+                calculated_areas = []
 
-        # Show the frame
-        cv2.imshow("Seg8", annotated_frame)
-        cv2.resizeWindow("Seg8", 800, 600)
+                if len(inference_class_list) > 1:
+                    continue
 
-        if cv2.waitKey(10) == ord('q'):
-            break
+                if inference_class_list is not None and inference_class_list[0] in [0, 2]:
+                    if selected_contour_pixels is not None and len(selected_contour_pixels) > 0:
+                        selected_contour_pixels = np.array(selected_contour_pixels)
+                        # Extract the RGB values at the specified coordinates, assuming selected_contour_pixels is in (x, y) format
+                        pixel_values = frame[selected_contour_pixels[:, 1], selected_contour_pixels[:, 0]]
+                        # Find indices where pixel intensity is below the black_pixel_threshold (for any RGB channel)
+                        dark_contour_pixel_indices = np.argwhere((pixel_values < black_pixel_threshold).any(axis=-1))
+                        selected_contour_spatials = selected_contour_spatials[dark_contour_pixel_indices]
 
-# np.save("filename", calculated_areas)
+                if selected_contour_spatials is not None and len(selected_contour_spatials) > 0:
+                    try:
+                        selected_contour_spatials_flat = [item for sublist in selected_contour_spatials for item in sublist]
+                        selected_contour_spatials_np = np.array(selected_contour_spatials_flat).reshape(-1, 3)
+                        polygon = pyny.Polygon(selected_contour_spatials_np)
+                        current_area = (polygon.get_area()) / 100
+                        print(f'current_area is: {int(current_area)} cm^2')
+                    except Exception as e:
+                        print(f"Error while processing selected_contour_spatials: {e}")
+                
+                if current_area is not None:
+                    calculated_areas = np.append(calculated_areas, current_area)
 
-my_seg8.stop_threads()
-del my_seg8
-cv2.destroyAllWindows()
+                # Show the frame
+                cv2.imshow('Seg8', annotated_frame)
+
+                if cv2.waitKey(1) == ord('q'):
+                    break
+
+        except KeyboardInterrupt:
+            print("Interrupted by user")
+
+        np.save("New_area", calculated_areas)
+
+        my_seg8.stop_threads()
+        del my_seg8
+        cv2.destroyAllWindows()
