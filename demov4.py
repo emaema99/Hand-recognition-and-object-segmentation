@@ -10,7 +10,7 @@ from HandTrackerRendererV3 import HandTrackerRenderer
 from CustomPipeline2 import CustomPipeline
 from HandTrackerEdgeV4 import HandTracker
 from seg8_nano_v5 import Seg8
-from seg8_hand_utils_v2 import HostSpatialsCalc
+from seg8_hand_utils_v3 import HostSpatialsCalc
 from arduino_wifi_communication import ArduinoCommunicator
 
 '''

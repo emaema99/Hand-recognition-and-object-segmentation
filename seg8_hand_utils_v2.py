@@ -167,10 +167,6 @@ class HostSpatialsCalc:
         x_angle_tan_arr = x_pos_arr * value
         y_angle_tan_arr = y_pos_arr * value
 
-        # for i in range(len(y_angle_tan_arr)):
-        #     x_angle_tan_arr[i] = tan(self._calc_angle(depth_frame, x_pos_arr[i]))
-        #     y_angle_tan_arr[i] = tan(self._calc_angle(depth_frame, y_pos_arr[i]))
-
         # Calculate spatial coordinates for each ROI pixel
         spatials = zeros([len(x_angle_tan_arr), 3])
         spatials[:,0] = roi_depth_values_downsampled * x_angle_tan_arr
