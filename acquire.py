@@ -2,13 +2,11 @@ import depthai as dai
 import numpy as np
 import cv2
 
-import pyny3d.geoms as pyny
 from scipy.spatial import ConvexHull
-
 from seg8_nano_v5 import Seg8
 from seg8_hand_utils_v3 import HostSpatialsCalc
 
-black_pixel_threshold = 50
+black_pixel_threshold = 40
 
 if __name__ == '__main__':
 
@@ -105,14 +103,16 @@ if __name__ == '__main__':
                         print("Warning: calc_roi_each_point_spatials returned None values")
                         selected_contour_spatials, selected_contour_pixels = [], []
                 except Exception as e:
-                    print(f"Error in calc_roi_each_point_spatials: {e}")
+                    print(f"Error in calc_roi_each_point_spatials")
                     selected_contour_spatials, selected_contour_pixels = [], []
 
-                dark_contour_pixel_indices = []
-                current_area = []
+                dark_contour_pixel_indices = None
+                current_area = None
+                area_threshold = 600 # cm^2
 
                 if inference_class_list and len(inference_class_list) > 0 and inference_class_list[0] in [0, 2]:
                     if selected_contour_pixels is not None and len(selected_contour_pixels) > 0:
+                        area_threshold = 100 # cm^2
                         selected_contour_pixels = np.array(selected_contour_pixels)
                         pixel_values = frame[selected_contour_pixels[:, 0], selected_contour_pixels[:, 1]]
                         dark_contour_pixel_indices = np.argwhere((pixel_values < black_pixel_threshold).any(axis=-1))
@@ -135,10 +135,6 @@ if __name__ == '__main__':
                 if selected_contour_spatials is not None and len(selected_contour_spatials) > 0:
                     try:
                         selected_contour_spatials = np.reshape(selected_contour_spatials, (selected_contour_spatials.shape[0], 3))
-                        # min_x = np.min(selected_contour_spatials[:,0])
-                        # min_y = np.min(selected_contour_spatials[:,1])
-                        # max_x = np.max(selected_contour_spatials[:,0])
-                        # max_y = np.max(selected_contour_spatials[:,1])
                         min_x_index = np.argmin(selected_contour_spatials[:,0])
                         point1 = selected_contour_spatials[min_x_index, :]
                         max_x_index = np.argmax(selected_contour_spatials[:,0])
@@ -154,13 +150,15 @@ if __name__ == '__main__':
                         current_area = (polygon.area) / 100
                         # current_area = (polygon.get_area()) / 100
                         print(f'current_area is: {int(current_area)} cm^2')
+                        selected_contour_spatials = None
+
                     except Exception as e:
-                        print(f"Error while processing selected_contour_spatials: {e}")
-                
-                if current_area is not None:
+                        print(f"Error while processing selected_contour_spatials")
+                        current_area = None
+
+                if isinstance(current_area, (int,float)) and current_area < area_threshold:
                     calculated_areas = np.append(calculated_areas, current_area)
 
-                # Show the frame
                 cv2.imshow('Seg8', annotated_frame)
 
                 if cv2.waitKey(1) == ord('q'):
@@ -173,7 +171,8 @@ if __name__ == '__main__':
 
     areas = np.load('New_area.npy')
     print(areas)
-    print(np.mean(areas))
+    mean_areas = np.mean(areas)
+    print("\nMean area: ", mean_areas, "\n")
 
     my_seg8.stop_threads()
     del my_seg8
