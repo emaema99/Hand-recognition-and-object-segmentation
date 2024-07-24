@@ -2,6 +2,7 @@
 
 from math import tan, atan
 from numpy import deg2rad, isnan, array, copy, sum, zeros, argwhere, mean
+import numpy as np
 from depthai import CameraBoardSocket
 
 class HostSpatialsCalc:
@@ -58,7 +59,11 @@ class HostSpatialsCalc:
         depthROI = depth_frame[ymin:ymax, xmin:xmax]
         inRange = (self.THRESH_LOW <= depthROI) & (depthROI <= self.THRESH_HIGH)
 
-        averageDepth = averaging_method(depthROI[inRange])
+        # print("depthROI", depthROI)
+        # print("in range: ", inRange)
+        # print("depthROI: ", depthROI[inRange])
+
+        averageDepth = averaging_method(np.reshape(depthROI[inRange], (-1)))
 
         # Calculate the centroid of the ROI
         centroid = array([int((xmax + xmin) / 2), int((ymax + ymin) / 2)])
@@ -66,8 +71,8 @@ class HostSpatialsCalc:
         # Calculate the middle of the depth image width and height
         midW = int(depth_frame.shape[1] / 2)
         midH = int(depth_frame.shape[0] / 2)
-        bb_x_pos = centroid['x'] - midW
-        bb_y_pos = centroid['y'] - midH
+        bb_x_pos = centroid[0] - midW
+        bb_y_pos = centroid[1] - midH
 
         # Calculate angles and spatial coordinates
         angle_x = self._calc_angle(depth_frame, bb_x_pos)
@@ -147,8 +152,8 @@ class HostSpatialsCalc:
         roi_depth_values_downsampled = roi_depth_values_valid[::down_sampling]
         roi_pixels_in_range_downsampled = roi_pixels_in_range_valid[::down_sampling,:]
 
-        if not roi_depth_values_downsampled.size > 5:
-            return None, None
+        # if not roi_depth_values_downsampled.size > 5:
+        #     return None, None
 
         # Calculate the middle of the depth image width and height
         midW = int(depth_frame_c.shape[1] / 2)
