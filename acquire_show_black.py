@@ -8,6 +8,12 @@ import pyny3d.geoms as pyny
 from seg8_nano_v5 import Seg8
 from seg8_hand_utils_v3 import HostSpatialsCalc
 
+import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
+from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+
 black_pixel_threshold = 45
 
 if __name__ == '__main__':
@@ -44,6 +50,7 @@ if __name__ == '__main__':
     stereo.setLeftRightCheck(True)
     stereo.setDepthAlign(dai.CameraBoardSocket.CAM_A)
     stereo.setSubpixel(False)
+    stereo.setOutputSize(512,288)
 
     spatial_location_calculator = pipeline.createSpatialLocationCalculator()
     spatial_location_calculator.inputConfig.setWaitForMessage(True)
@@ -104,95 +111,121 @@ if __name__ == '__main__':
                 annotated_frame, obj_masks_indices, obj_masks_contour_indices, inference_class_list = my_seg8.get_seg_post_processing()
 
                 try:
-                    selected_contour_spatials, selected_contour_pixels = spatial_calc.calc_roi_each_point_spatials(depth_frame, obj_masks_indices, 1)
-                    if selected_contour_spatials is None or selected_contour_pixels is None:
+                    selected_spatials, selected_pixels = spatial_calc.calc_roi_each_point_spatials(depth_frame, obj_masks_indices, 1)
+                    if selected_spatials is None or selected_pixels is None:
                         print("Warning: calc_roi_each_point_spatials returned None values")
-                        selected_contour_spatials, selected_contour_pixels = [], []
+                        selected_spatials, selected_pixels = [], []
                 except Exception as e:
                     print(f"Error in calc_roi_each_point_spatials")
-                    selected_contour_spatials, selected_contour_pixels = [], []
+                    selected_spatials, selected_pixels = [], []
 
-                dark_contour_pixel_indices = None
+                dark_pixel_indices = None
                 current_area = None
                 area_threshold = 700 # cm^2
                 
                 dark_pixel_frame = frame.copy()
                 extremetes_pixel_frame = frame.copy()
 
-                if inference_class_list and len(inference_class_list) > 0 and inference_class_list[0] in [0, 2]:
-                    if selected_contour_pixels is not None and len(selected_contour_pixels) > 0:
-                        area_threshold = 150 # cm^2
-                        selected_contour_pixels = np.array(selected_contour_pixels)
-                        pixel_values = frame[selected_contour_pixels[:, 0], selected_contour_pixels[:, 1]]
-                        dark_contour_pixel_indices = np.argwhere((pixel_values < black_pixel_threshold).any(axis=-1))
-                        selected_contour_spatials = selected_contour_spatials[dark_contour_pixel_indices]
+                # if inference_class_list and len(inference_class_list) > 0 and inference_class_list[0] in [0, 2]:
+                #     if selected_pixels is not None and len(selected_pixels) > 0:
+                #         area_threshold = 150 # cm^2
+                #         selected_pixels = np.array(selected_pixels)
+                #         pixel_values = frame[selected_pixels[:, 0], selected_pixels[:, 1]]
+                #         dark_pixel_indices = np.argwhere((pixel_values < black_pixel_threshold).any(axis=-1))
+                #         selected_spatials = selected_spatials[dark_pixel_indices]
 
-                        # Highlight dark pixels in the dark_pixel_frame
-                        for i in dark_contour_pixel_indices:
-                            cv2.circle(dark_pixel_frame, (selected_contour_pixels[i[0], 1], selected_contour_pixels[i[0], 0]), 1, (0, 255, 0), -1)
+                #         # Highlight dark pixels in the dark_pixel_frame
+                #         for i in dark_pixel_indices:
+                #             cv2.circle(dark_pixel_frame, (selected_pixels[i[0], 1], selected_pixels[i[0], 0]), 1, (0, 255, 0), -1)
 
-                if selected_contour_spatials is not None and len(selected_contour_spatials) > 0:
+                if selected_spatials is not None and len(selected_spatials) > 0:
                     try:
-                        selected_contour_spatials = np.reshape(selected_contour_spatials, (selected_contour_spatials.shape[0], 3))
-                        min_x_index = np.argmin(selected_contour_spatials[:,0])
-                        point1 = selected_contour_spatials[min_x_index, :]
-                        max_x_index = np.argmax(selected_contour_spatials[:,0])
-                        point2 = selected_contour_spatials[max_x_index, :]
-                        min_y_index = np.argmin(selected_contour_spatials[:,1])
-                        point3 = selected_contour_spatials[min_y_index, :]
-                        max_y_index = np.argmax(selected_contour_spatials[:,1])
-                        point4 = selected_contour_spatials[max_y_index, :]
+                        selected_spatials = np.reshape(selected_spatials, (selected_spatials.shape[0], 3))
+                        min_x_index = np.argmin(selected_spatials[:,0])
+                        point1 = selected_spatials[min_x_index, :]
+                        max_x_index = np.argmax(selected_spatials[:,0])
+                        point2 = selected_spatials[max_x_index, :]
+                        min_y_index = np.argmin(selected_spatials[:,1])
+                        point3 = selected_spatials[min_y_index, :]
+                        max_y_index = np.argmax(selected_spatials[:,1])
+                        point4 = selected_spatials[max_y_index, :]
 
                         print("X max: ",point2)
                         print("X min: ",point1)
 
-                        print("Y length: ",point4-point3)
+                        print("\nH length: ",point4[1]-point3[1])
+                        print("W length: ",point2[0]-point1[0])
 
                         # Calculate the object's distance using the depth frame
-                        obj_z = np.quantile(selected_contour_spatials[:,2], 0.8)
-                        for i in range(selected_contour_spatials.shape[0]):
-                            selected_contour_spatials[i,2] = obj_z
+                        obj_z = np.quantile(selected_spatials[:,2], 0.8)
+                        for i in range(selected_spatials.shape[0]):
+                            selected_spatials[i,2] = obj_z
 
-                        selected_contour_spatials_flat = [item for sublist in selected_contour_spatials for item in sublist]
-                        selected_contour_spatials_np = np.array(selected_contour_spatials_flat).reshape(-1, 3)
-                        # polygon = ConvexHull(selected_contour_spatials_np)
-                        polygon = pyny.Polygon(selected_contour_spatials_np)
+                        selected_spatials_flat = [item for sublist in selected_spatials for item in sublist]
+                        selected_spatials_np = np.array(selected_spatials_flat).reshape(-1, 3)
+                        # polygon = ConvexHull(selected_spatials_np)
+                        polygon = pyny.Polygon(selected_spatials)
                         # current_area = (polygon.area) / 100
                         current_area = (polygon.get_area()) / 100
-                        print(f'current_area is: {int(current_area)} cm^2')
-                        for i in range(selected_contour_pixels.shape[0]): 
-                            cv2.circle(extremetes_pixel_frame, (selected_contour_pixels[i, 1], selected_contour_pixels[i, 0]), 1, (0, 255, 0), -1)
+                        
+                        print("plot type: ", type(polygon.get_plotable3d()))
+                        print("plot: ", polygon.points)
+
+                        indexes = []
+                        for i in range(selected_spatials.shape[0]):
+                            for point in polygon.points:
+                                if selected_spatials[i, 0]==point[0] and selected_spatials[i, 1]==point[1] and selected_spatials[i, 2]==point[2]:
+                                    indexes.append(i)
+                        
+                        
+                        selected_pixels_poly_contour_y = selected_pixels[indexes,0]
+                        selected_pixels_poly_contour_x = selected_pixels[indexes,1]
+                        selected_pixels_poly_contour_xy = selected_pixels[indexes,:]
+                        selected_pixels_poly_contour_xy[:,0] = selected_pixels_poly_contour_x
+                        selected_pixels_poly_contour_xy[:,1] = selected_pixels_poly_contour_y
+                        cv2.drawContours(extremetes_pixel_frame, [selected_pixels_poly_contour_xy], -1, (255), cv2.FILLED)
+                        # for index in indexes:
+                        #     cv2.circle(extremetes_pixel_frame, (selected_pixels[index, 1], selected_pixels[index, 0]), 1, (0, 255, 0), -1)
+                        
+                        # cv2.draw(polygon.plot2d())
+                        print(f'\ncurrent_area is: {int(current_area)} cm^2')
+                        # cv2.circle(extremetes_pixel_frame, (selected_pixels[min_x_index, 1], selected_pixels[min_x_index, 0]), 1, (0, 255, 0), -1)
+                        # cv2.circle(extremetes_pixel_frame, (selected_pixels[max_x_index, 1], selected_pixels[max_x_index, 0]), 1, (0, 255, 0), -1)
+                        # cv2.circle(extremetes_pixel_frame, (selected_pixels[min_y_index, 1], selected_pixels[min_y_index, 0]), 1, (0, 255, 0), -1)
+                        # cv2.circle(extremetes_pixel_frame, (selected_pixels[max_y_index, 1], selected_pixels[max_y_index, 0]), 1, (0, 255, 0), -1)
+                        # for i in range(selected_pixels.shape[0]): 
+                        #     cv2.circle(extremetes_pixel_frame, (selected_pixels[i, 1], selected_pixels[i, 0]), 1, (0, 255, 0), -1)
                     except Exception as e:
-                        print(f"Error while processing selected_contour_spatials: {e}")
+                        print(f"Error while processing selected_spatials: {e}")
 
                 # # metodo stupido
-                # if selected_contour_spatials is not None and len(selected_contour_spatials) > 0:
+                # if selected_spatials is not None and len(selected_spatials) > 0:
                 #     try:
-                #         selected_contour_spatials = np.reshape(selected_contour_spatials, (selected_contour_spatials.shape[0], 3))
-                #         min_x_index = np.argmin(selected_contour_spatials[:,0])
-                #         point1 = selected_contour_spatials[min_x_index, :]
-                #         max_x_index = np.argmax(selected_contour_spatials[:,0])
-                #         point2 = selected_contour_spatials[max_x_index, :]
-                #         min_y_index = np.argmin(selected_contour_spatials[:,1])
-                #         point3 = selected_contour_spatials[min_y_index, :]
-                #         max_y_index = np.argmax(selected_contour_spatials[:,1])
-                #         point4 = selected_contour_spatials[max_y_index, :]
+                #         selected_spatials = np.reshape(selected_spatials, (selected_spatials.shape[0], 3))
+                #         min_x_index = np.argmin(selected_spatials[:,0])
+                #         point1 = selected_spatials[min_x_index, :]
+                #         max_x_index = np.argmax(selected_spatials[:,0])
+                #         point2 = selected_spatials[max_x_index, :]
+                #         min_y_index = np.argmin(selected_spatials[:,1])
+                #         point3 = selected_spatials[min_y_index, :]
+                #         max_y_index = np.argmax(selected_spatials[:,1])
+                #         point4 = selected_spatials[max_y_index, :]
 
-                #         cv2.circle(extremetes_pixel_frame, (selected_contour_pixels[min_x_index, 1], selected_contour_pixels[min_x_index, 0]), 1, (0, 255, 0), -1)
-                #         cv2.circle(extremetes_pixel_frame, (selected_contour_pixels[max_x_index, 1], selected_contour_pixels[max_x_index, 0]), 1, (0, 255, 0), -1)
-                #         cv2.circle(extremetes_pixel_frame, (selected_contour_pixels[min_y_index, 1], selected_contour_pixels[min_y_index, 0]), 1, (0, 255, 0), -1)
-                #         cv2.circle(extremetes_pixel_frame, (selected_contour_pixels[max_y_index, 1], selected_contour_pixels[max_y_index, 0]), 1, (0, 255, 0), -1)
+                #         cv2.circle(extremetes_pixel_frame, (selected_pixels[min_x_index, 1], selected_pixels[min_x_index, 0]), 1, (0, 255, 0), -1)
+                #         cv2.circle(extremetes_pixel_frame, (selected_pixels[max_x_index, 1], selected_pixels[max_x_index, 0]), 1, (0, 255, 0), -1)
+                #         cv2.circle(extremetes_pixel_frame, (selected_pixels[min_y_index, 1], selected_pixels[min_y_index, 0]), 1, (0, 255, 0), -1)
+                #         cv2.circle(extremetes_pixel_frame, (selected_pixels[max_y_index, 1], selected_pixels[max_y_index, 0]), 1, (0, 255, 0), -1)
 
                 #         points = np.array([point1, point2, point3, point4])
                 #         polygon = ConvexHull(points)
-                #         # polygon = pyny.Polygon(selected_contour_spatials_np)
+                #         # polygon = pyny.Polygon(selected_spatials_np)
                 #         current_area = (polygon.area) / 100
                 #         # current_area = (polygon.get_area()) / 100
                 #         print(f'current_area is: {int(current_area)} cm^2')
-                #         selected_contour_spatials = None
+                #         selected_spatials = None
 
                 #     except Exception as e:
-                #         print(f"Error while processing selected_contour_spatials: ", e)
+                #         print(f"Error while processing selected_spatials: ", e)
                 #         current_area = None
 
                 if isinstance(current_area, (int,float)) and current_area < area_threshold:
