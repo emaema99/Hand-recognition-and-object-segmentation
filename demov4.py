@@ -5,6 +5,7 @@ from numpy import uint8, inf, min, nan, int32, isnan, ndarray, linalg, bool_, ar
 from time import time, sleep
 from copy import deepcopy
 import pyny3d.geoms as pyny
+import numpy as np
 
 from HandTrackerRendererV3 import HandTrackerRenderer
 from CustomPipeline2 import CustomPipeline
@@ -23,7 +24,10 @@ camera_fps = 15
 num_elements_moving_avarage = 15
 hand_obj_dist_threshold = 60 #[mm]
 down_sampling = 5
-black_pixel_threshold = 60
+black_pixel_threshold = 30
+
+# obj_class_area_threshold = np.array([139.5, 428.5, 386.5])
+obj_class_area_threshold = np.array([139.5, 428.5, 276])
 
 DISPLAY = True
 SCALING = True
@@ -139,22 +143,33 @@ def calc_distances(masks_pixels, depth_frame, hand_spatial):
 
 def calc_area(selected_contour_pixels, selected_contour_spatials, grasped_object, rgb_frame, black_pixel_threshold):
     dark_contour_pixel_indices = []
+    area = None
 
-    if grasped_object in ["Hammer", "Crimper"]:
-        if selected_contour_pixels is not None:
-            selected_contour_pixels = array(selected_contour_pixels)
-            # Extract the RGB values at the specified coordinates, assuming selected_contour_pixels is in (x, y) format
-            pixel_values = rgb_frame[selected_contour_pixels[:, 0], selected_contour_pixels[:, 1]]
-            # Find indices where pixel intensity is below the black_pixel_threshold (for any RGB channel)
-            dark_contour_pixel_indices = argwhere((pixel_values < black_pixel_threshold).any(axis=-1))
-            selected_contour_spatials = selected_contour_spatials[dark_contour_pixel_indices]
+    # if grasped_object in ["Hammer", "Crimper"]:
+    #     if selected_contour_pixels is not None:
+    #         selected_contour_pixels = array(selected_contour_pixels)
+    #         # Extract the RGB values at the specified coordinates, assuming selected_contour_pixels is in (x, y) format
+    #         pixel_values = rgb_frame[selected_contour_pixels[:, 0], selected_contour_pixels[:, 1]]
+    #         # Find indices where pixel intensity is below the black_pixel_threshold (for any RGB channel)
+    #         dark_contour_pixel_indices = argwhere((pixel_values < black_pixel_threshold).any(axis=-1))
+    #         selected_contour_spatials = selected_contour_spatials[dark_contour_pixel_indices]
 
     if selected_contour_spatials is not None and len(selected_contour_spatials) > 0:
         try:
+            # Calculate the object's distance using the depth frame
+            obj_z = np.quantile(selected_contour_spatials[:,2], 0.8)
+            if obj_z < 300 or obj_z > 1100:
+                print("ops")
+                return None
+            
+            for i in range(selected_contour_spatials.shape[0]):
+                selected_contour_spatials[i,2] = obj_z
+
             # Flatten the list of arrays to ensure homogeneity
             selected_contour_spatials_flat = [item for sublist in selected_contour_spatials for item in sublist]
             # Convert to numpy array, ensuring the correct shape
             selected_contour_spatials_np = array(selected_contour_spatials_flat).reshape(-1, 3)
+
             polygon = pyny.Polygon(selected_contour_spatials_np)
             area = (polygon.get_area())/100
             print(f'Area is: {int(area)} cm^2')
@@ -162,6 +177,10 @@ def calc_area(selected_contour_pixels, selected_contour_spatials, grasped_object
 
         except Exception as e:
             print(f"Error while processing selected_contour_spatials: {e}")
+
+    return area
+
+
 
 if __name__ == '__main__':
     '''
@@ -187,8 +206,10 @@ if __name__ == '__main__':
     grasping_status_arr = zeros(num_elements_moving_avarage, dtype=bool_)
     hand_spatial_arr = zeros([num_elements_moving_avarage, 3])
     obj_spatial_arr = zeros([num_elements_moving_avarage, 3])
+    area_arr = zeros(num_elements_moving_avarage)
     last_grasped_obj_name = "-"
     last_obj_weight = "-"
+    obj_class_id = None
     released = True
     moving_avarage_index = 0
 
@@ -258,6 +279,7 @@ if __name__ == '__main__':
             hand = None
             class_names = None
             obj_weight = None
+            obj_class_id = None
             grasping_status = False
             grasped_obj_name = "-"
             hand_obj_dist = "-"
@@ -304,7 +326,7 @@ if __name__ == '__main__':
                         selected_index, selected_obj_spatial, selected_dist, selected_contour_spatials, selected_contour_pixels = calc_distances(mask_contour_indices_i_2, depth_frame_i_2, hand_spatial)
                         if selected_index is not None and selected_index >= 0 and selected_index < len(inference_class_list_i_2):
                             grasped_obj_name = my_seg8.get_class_names()[inference_class_list_i_2[selected_index]]
-                            obj_weight = my_seg8.get_class_weight()[inference_class_list_i_2[selected_index]]
+                            obj_class_id = inference_class_list_i_2[selected_index]
                             hand_obj_dist = int(selected_dist)
 
                             # Update moving average arrays with current data
@@ -326,22 +348,23 @@ if __name__ == '__main__':
 
                             # Calculates the 3D norm (spatial distance) between hand and object
                             hand_obj_dist = linalg.norm(hand_spatial_avarage - obj_spatial_avarage)
-                            if hand_obj_dist is not None and hand_obj_dist > 0:
-                                print(f'Hand-object distance is: {(int(hand_obj_dist))/10} cm')
-                            else:
-                                print(f'Hand-object distance cannot be calculated')
+                            # if hand_obj_dist is not None and hand_obj_dist > 0:
+                            #     print(f'Hand-object distance is: {(int(hand_obj_dist))/10} cm')
+                            # else:
+                            #     print(f'Hand-object distance cannot be calculated')
 
                             if hand_obj_dist < hand_obj_dist_threshold:
                                 grasping_status_arr[moving_avarage_index] = True
+                                print("ciao")
+                                if SCALING:
+                                    area = calc_area(selected_contour_pixels, selected_contour_spatials, grasped_obj_name, frame_i_2, black_pixel_threshold)
+                                    area_arr[moving_avarage_index] = area
+                                    print("area: ", area)
                             else:
                                 grasping_status_arr[moving_avarage_index] = False
 
                             # Update moving average index
                             moving_avarage_index = (moving_avarage_index + 1) % num_elements_moving_avarage
-
-                            if SCALING:
-                                # Convert to numpy array, ensuring the correct shape
-                                area = calc_area(selected_contour_pixels, selected_contour_spatials, grasped_obj_name, frame_i_2, black_pixel_threshold)
 
 ##########################################################################################################################################################
                 else:
@@ -359,19 +382,39 @@ if __name__ == '__main__':
             if sum(grasping_status_arr) > num_elements_moving_avarage/2:
                 if released:
                     last_grasped_obj_name = grasped_obj_name
+                    print("obj_class_id: ", obj_class_id)
+                    obj_weight = my_seg8.get_class_weight()[obj_class_id][0]
+                    if SCALING:
+                        # compute weight
+                        print("area_arr: ", area_arr)
+                        good_values_area_arr_indeces = np.argwhere(area_arr > 0)
+                        area_values = area_arr[good_values_area_arr_indeces]
+                        mean_area = np.mean(area_values)
+                        print("\n\n\n\n\narea mean: ", mean_area)
+                        if mean_area < obj_class_area_threshold[obj_class_id]:
+                            obj_weight = my_seg8.get_class_weight()[obj_class_id][0]
+                            last_grasped_obj_name = last_grasped_obj_name + " small"
+                        else:
+                            obj_weight = my_seg8.get_class_weight()[obj_class_id][1]
+                            last_grasped_obj_name = last_grasped_obj_name + " big"
+
                     last_obj_weight = obj_weight
+
                     # If the communication is ON, sends the weight to the exosuit
                     if EXO_COMM:
-                        communicator.send_weight(deepcopy(obj_weight))
+                        communicator.send_weight(deepcopy(last_obj_weight))
                 released = False
                 grasping_status_avarage = True
             else:
                 if EXO_COMM:
                     communicator.send_weight(0)
+                if not released:
+                    area_arr = zeros(num_elements_moving_avarage)
                 released = True
                 last_grasped_obj_name = "-"
                 last_obj_weight = "-"
                 grasping_status_avarage = False 
+
                 
             if DISPLAY:
                 # Draw hand annotations on the frame
