@@ -3,18 +3,28 @@ import numpy as np
 import cv2
 import time
 
-from scipy.spatial import ConvexHull
+# from scipy.spatial import ConvexHull
 import pyny3d.geoms as pyny
 from seg8_nano_v5 import Seg8
-from seg8_hand_utils_v3 import HostSpatialsCalc
+from seg8_hand_utils_v2 import HostSpatialsCalc
 
-import matplotlib.pyplot as plt
-from matplotlib.figure import Figure
-from mpl_toolkits.mplot3d import Axes3D
-from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+# import matplotlib.pyplot as plt
+# from matplotlib.figure import Figure
+# from mpl_toolkits.mplot3d import Axes3D
+# from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+# from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 
-black_pixel_threshold = 45
+black_pixel_threshold = 30
+kernel_side = 11
+
+kernel_half_side = int(kernel_side/2)
+
+
+def switch_x_y_column(arr):
+    new_arr = np.zeros(arr.shape, dtype=np.uint8)
+    new_arr[:,0] = arr[:,1]
+    new_arr[:,1] = arr[:,0]
+    return new_arr
 
 if __name__ == '__main__':
 
@@ -39,18 +49,19 @@ if __name__ == '__main__':
 
     left.setBoardSocket(dai.CameraBoardSocket.CAM_B)
     left.setCamera("left")
-    left.setResolution(dai.MonoCameraProperties.SensorResolution.THE_480_P)
+    left.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
 
     right.setBoardSocket(dai.CameraBoardSocket.CAM_C)
     right.setCamera("right")
-    right.setResolution(dai.MonoCameraProperties.SensorResolution.THE_480_P)
+    right.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
 
     stereo.setDefaultProfilePreset(dai.node.StereoDepth.PresetMode.HIGH_DENSITY)
-    stereo.initialConfig.setConfidenceThreshold(255)
-    stereo.setLeftRightCheck(True)
     stereo.setDepthAlign(dai.CameraBoardSocket.CAM_A)
-    stereo.setSubpixel(False)
+    stereo.initialConfig.setConfidenceThreshold(255)
     stereo.setOutputSize(512,288)
+    stereo.setSubpixel(False)
+    stereo.setLeftRightCheck(True)
+    stereo.setExtendedDisparity(False)
 
     spatial_location_calculator = pipeline.createSpatialLocationCalculator()
     spatial_location_calculator.inputConfig.setWaitForMessage(True)
@@ -93,10 +104,10 @@ if __name__ == '__main__':
         try:
             cv2.namedWindow('Seg8', cv2.WINDOW_KEEPRATIO)
             cv2.resizeWindow('Seg8', 1280, 720)
-            cv2.namedWindow('Dark Pixels', cv2.WINDOW_KEEPRATIO)
-            cv2.resizeWindow('Dark Pixels', 1280, 720)
-            cv2.namedWindow('extremetes_pixel_frame', cv2.WINDOW_KEEPRATIO)
-            cv2.resizeWindow('extremetes_pixel_frame', 1280, 720)
+            # cv2.namedWindow('Dark Pixels', cv2.WINDOW_KEEPRATIO)
+            # cv2.resizeWindow('Dark Pixels', 1280, 720)
+            # cv2.namedWindow('extremetes_pixel_frame', cv2.WINDOW_KEEPRATIO)
+            # cv2.resizeWindow('extremetes_pixel_frame', 1280, 720)
 
             while True:
                 rgb_msg = rgb_queue.get()
@@ -112,6 +123,7 @@ if __name__ == '__main__':
 
                 try:
                     selected_spatials, selected_pixels = spatial_calc.calc_roi_each_point_spatials(depth_frame, obj_masks_indices, 1)
+                    #selected_spatials = np.reshape(selected_spatials, (selected_spatials.shape[0], 3))
                     if selected_spatials is None or selected_pixels is None:
                         print("Warning: calc_roi_each_point_spatials returned None values")
                         selected_spatials, selected_pixels = [], []
@@ -121,40 +133,72 @@ if __name__ == '__main__':
 
                 dark_pixel_indices = None
                 current_area = None
-                area_threshold = 700 # cm^2
-                
+
+                gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                mean_kernel = np.ones((kernel_side, kernel_side), np.float32) / (kernel_side*kernel_side)
+
                 dark_pixel_frame = frame.copy()
                 extremetes_pixel_frame = frame.copy()
 
                 # if inference_class_list and len(inference_class_list) > 0 and inference_class_list[0] in [0, 2]:
                 #     if selected_pixels is not None and len(selected_pixels) > 0:
-                #         area_threshold = 150 # cm^2
                 #         selected_pixels = np.array(selected_pixels)
-                #         pixel_values = frame[selected_pixels[:, 0], selected_pixels[:, 1]]
-                #         dark_pixel_indices = np.argwhere((pixel_values < black_pixel_threshold).any(axis=-1))
-                #         selected_spatials = selected_spatials[dark_pixel_indices]
+                #         print("frame shape:", frame.shape) # 288, 512, 3
+                #         #indeces_pixel_kernel_safe_x = np.argwhere(selected_pixels[0] > kernel_half_side and selected_pixels[0] < frame.shape[1]-kernel_half_side)
+                #         pixel_values = gray_frame[selected_pixels[:, 0], selected_pixels[:, 1]]
+                #         dark_pixel_indices = np.argwhere(pixel_values < black_pixel_threshold)
+                #         # pixel_values = frame[selected_pixels[:, 0], selected_pixels[:, 1]]
+                #         # dark_pixel_indices = np.argwhere((pixel_values < black_pixel_threshold).any(axis=-1))
+
+                #         selected_spatials = selected_spatials[dark_pixel_indices].reshape((-1,3))
+                #         print("selected_spatials shape: ", selected_spatials.shape)
+                #         selected_pixels = selected_pixels[dark_pixel_indices].reshape((-1,2))
+                #         print("selected_pixels shape: ", selected_pixels.shape)
+
+                #         binary_frame = np.zeros((frame.shape), dtype=np.bool_)
+                #         print("selected_pixels\n", selected_pixels)
+                #         selected_pixels = switch_x_y_column(selected_pixels) # yx -> xy
+                #         binary_frame[selected_pixels] = binary_frame[selected_pixels] + 1
+
+                #         for pixel in selected_pixels:
+                #             # y, x = pixel
+                #             # gray_frame[y, x] = np.sum(gray_frame[y-kernel_side:y+kernel_side+1, x-kernel_side:x+kernel_side+1] * mean_kernel)
+                #             print("mean_kernel: ", mean_kernel)
+                #             binary_frame[pixel] = np.bool_(np.sum(gray_frame[pixel[0]-kernel_half_side:pixel[0]+kernel_half_side+1,
+                #                                                              pixel[1]-kernel_half_side:pixel[1]+kernel_half_side+1] * mean_kernel))
+                #             # gray_frame[pixel[:,0],pixel[:,1]] = np.sum[gray_frame[pixel[:,0] - (kernel_side/2):pixel[:,0] + (kernel_side/2),
+                #             #                                           pixel[:,1] - (kernel_side/2):pixel[:,1] + (kernel_side/2)]]*kernel
+
+                #         pluto_indices = []
+                #         for i in range(selected_pixels.shape[0]):
+                #             if binary_frame[selected_pixels[i]] == 1:
+                #                 pluto_indices.append(i)
+
+                #         selected_spatials = selected_spatials[pluto_indices]
+                #         selected_pixels = selected_pixels[pluto_indices]
+                        
 
                 #         # Highlight dark pixels in the dark_pixel_frame
-                #         for i in dark_pixel_indices:
-                #             cv2.circle(dark_pixel_frame, (selected_pixels[i[0], 1], selected_pixels[i[0], 0]), 1, (0, 255, 0), -1)
+                #         for pixel in selected_pixels:
+                #             cv2.circle(dark_pixel_frame, pixel, 1, (0, 255, 0), -1)
 
                 if selected_spatials is not None and len(selected_spatials) > 0:
                     try:
-                        selected_spatials = np.reshape(selected_spatials, (selected_spatials.shape[0], 3))
-                        min_x_index = np.argmin(selected_spatials[:,0])
-                        point1 = selected_spatials[min_x_index, :]
-                        max_x_index = np.argmax(selected_spatials[:,0])
-                        point2 = selected_spatials[max_x_index, :]
-                        min_y_index = np.argmin(selected_spatials[:,1])
-                        point3 = selected_spatials[min_y_index, :]
-                        max_y_index = np.argmax(selected_spatials[:,1])
-                        point4 = selected_spatials[max_y_index, :]
+                        
+                        # min_x_index = np.argmin(selected_spatials[:,0])
+                        # point1 = selected_spatials[min_x_index, :]
+                        # max_x_index = np.argmax(selected_spatials[:,0])
+                        # point2 = selected_spatials[max_x_index, :]
+                        # min_y_index = np.argmin(selected_spatials[:,1])
+                        # point3 = selected_spatials[min_y_index, :]
+                        # max_y_index = np.argmax(selected_spatials[:,1])
+                        # point4 = selected_spatials[max_y_index, :]
 
-                        print("X max: ",point2)
-                        print("X min: ",point1)
+                        # print("X max: ",point2)
+                        # print("X min: ",point1)
 
-                        print("\nH length: ",point4[1]-point3[1])
-                        print("W length: ",point2[0]-point1[0])
+                        # print("\nH length: ",point4[1]-point3[1])
+                        # print("W length: ",point2[0]-point1[0])
 
                         # Calculate the object's distance using the depth frame
                         obj_z = np.quantile(selected_spatials[:,2], 0.8)
@@ -168,16 +212,15 @@ if __name__ == '__main__':
                         # current_area = (polygon.area) / 100
                         current_area = (polygon.get_area()) / 100
                         
-                        print("plot type: ", type(polygon.get_plotable3d()))
-                        print("plot: ", polygon.points)
+                        # print("plot type: ", type(polygon.get_plotable3d()))
+                        # print("plot: ", polygon.points)
 
                         indexes = []
                         for i in range(selected_spatials.shape[0]):
                             for point in polygon.points:
                                 if selected_spatials[i, 0]==point[0] and selected_spatials[i, 1]==point[1] and selected_spatials[i, 2]==point[2]:
                                     indexes.append(i)
-                        
-                        
+
                         selected_pixels_poly_contour_y = selected_pixels[indexes,0]
                         selected_pixels_poly_contour_x = selected_pixels[indexes,1]
                         selected_pixels_poly_contour_xy = selected_pixels[indexes,:]
@@ -186,7 +229,7 @@ if __name__ == '__main__':
                         cv2.drawContours(extremetes_pixel_frame, [selected_pixels_poly_contour_xy], -1, (255), cv2.FILLED)
                         # for index in indexes:
                         #     cv2.circle(extremetes_pixel_frame, (selected_pixels[index, 1], selected_pixels[index, 0]), 1, (0, 255, 0), -1)
-                        
+
                         # cv2.draw(polygon.plot2d())
                         print(f'\ncurrent_area is: {int(current_area)} cm^2')
                         # cv2.circle(extremetes_pixel_frame, (selected_pixels[min_x_index, 1], selected_pixels[min_x_index, 0]), 1, (0, 255, 0), -1)
@@ -228,13 +271,13 @@ if __name__ == '__main__':
                 #         print(f"Error while processing selected_spatials: ", e)
                 #         current_area = None
 
-                if isinstance(current_area, (int,float)) and current_area < area_threshold:
+                if isinstance(current_area, (int,float)):
                     calculated_areas = np.append(calculated_areas, current_area)
 
                 cv2.imshow('Seg8', annotated_frame)
-                cv2.imshow('Dark Pixels', dark_pixel_frame)
-                cv2.imshow('extremetes_pixel_frame', extremetes_pixel_frame)
-                time.sleep(0.5)
+                # cv2.imshow('Dark Pixels', gray_frame)
+                # cv2.imshow('extremetes_pixel_frame', extremetes_pixel_frame)
+                # time.sleep(0.5)
 
                 if cv2.waitKey(1) == ord('q'):
                     break
