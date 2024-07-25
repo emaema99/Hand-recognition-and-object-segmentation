@@ -18,7 +18,7 @@ class Seg8:
 	'''
 	def __init__(self, path_to_yolo, post_processing_active):
 		self.__class_names = ["Crimper", "Drill", "Hammer"]
-		self.__class_weight = [0.486, 1.350, 0.930]	# [kg]
+		self.__class_weight = [[0.390, 0.486], [1.350, 2.270], [0.930, 1.630]]	# [kg]
 		self.__path_to_yolo = path_to_yolo
 		self.__post_processing_active = post_processing_active
 
