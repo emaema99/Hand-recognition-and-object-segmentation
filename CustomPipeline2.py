@@ -203,6 +203,7 @@ class CustomPipeline:
 		right.setFps(self.internal_fps)
 
 		stereo.setDefaultProfilePreset(node.StereoDepth.PresetMode.HIGH_DENSITY)
+		stereo.setOutputSize(512,288)
 		stereo.setConfidenceThreshold(255)
 		stereo.setLeftRightCheck(True) # LR-check is required for depth alignment
 		stereo.setDepthAlign(CameraBoardSocket.CAM_A)
