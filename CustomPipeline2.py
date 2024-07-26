@@ -2,7 +2,7 @@
 
 import mediapipe_utils as mpu
 
-from depthai import Device, CameraBoardSocket, Pipeline, OpenVINO, node, ColorCameraProperties, MonoCameraProperties
+from depthai import Device, CameraBoardSocket, Pipeline, OpenVINO, node, ColorCameraProperties, MonoCameraProperties, MedianFilter
 from sys import exit
 from re import sub, DOTALL
 from pathlib import Path
@@ -203,6 +203,7 @@ class CustomPipeline:
 		right.setFps(self.internal_fps)
 
 		stereo.setDefaultProfilePreset(node.StereoDepth.PresetMode.HIGH_DENSITY)
+		stereo.initialConfig.setMedianFilter(MedianFilter.KERNEL_7x7)
 		stereo.setOutputSize(512,288)
 		stereo.setConfidenceThreshold(255)
 		stereo.setLeftRightCheck(True) # LR-check is required for depth alignment
