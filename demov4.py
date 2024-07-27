@@ -12,7 +12,7 @@ from HandTrackerRendererV3 import HandTrackerRenderer
 from CustomPipeline2 import CustomPipeline
 from HandTrackerEdgeV4 import HandTracker
 from seg8_nano_v5 import Seg8
-from seg8_hand_utils_v3 import HostSpatialsCalc
+from seg8_hand_utils_v2 import HostSpatialsCalc
 from arduino_wifi_communication import ArduinoCommunicator
 
 '''
@@ -29,7 +29,7 @@ down_sampling = 3
 # obj_class_area_threshold = array([139.5, 428.5, 386.5]) oggetti interi calcolati con metro
 # obj_class_area_threshold = array([139.5, 428.5, 276])  oggetti interi, con camera
 # obj_class_area_threshold = array([45, 256, 37]) # 40 / 50, 230 / 300, 28 / 46, camera 51 / 60, 
-obj_class_area_threshold = array([[10, 45, 100],[20, 428.5, 1000], [20, 95, 180]]) # 40 / 50, 230 / 300, 28 / 46, camera 51 / 60, 
+obj_class_area_threshold = array([[10, 45, 100],[20, 525, 1000], [20, 95, 180]]) # 40 / 50, 230 / 300, 28 / 46, camera 51 / 60, 
 
 # define range of black color in HSV
 hsv_v_lower_val = 0
