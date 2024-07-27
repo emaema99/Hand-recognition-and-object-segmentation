@@ -302,6 +302,7 @@ if __name__ == '__main__':
     obj_class_id = None
     released = True
     moving_avarage_index = 0
+    grasping_status_avarage = False
 
     # Initialize communication with the exosuit (if enabled)
     if EXO_COMM:
@@ -469,7 +470,7 @@ if __name__ == '__main__':
             start_time, frame_count, fps = calc_fps(start_time, frame_count, fps)
 
             # Calculate the moving average grasping status
-            if sum(grasping_status_arr) > num_elements_moving_avarage/2:
+            if released and sum(grasping_status_arr) > num_elements_moving_avarage/2:
                 if released:
                     last_grasped_obj_name = grasped_obj_name
                     # print("obj_class_id: ", obj_class_id)
@@ -497,7 +498,7 @@ if __name__ == '__main__':
                         communicator.send_weight(deepcopy(last_obj_weight))
                 released = False
                 grasping_status_avarage = True
-            else:
+            elif not released and sum(grasping_status_arr) == 0:
                 if EXO_COMM:
                     communicator.send_weight(0)
                 if not released:
