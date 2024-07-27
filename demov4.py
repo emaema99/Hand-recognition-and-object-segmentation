@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 
-from cv2 import FONT_HERSHEY_SIMPLEX, LINE_AA, WINDOW_KEEPRATIO, COLOR_BGR2GRAY, putText, namedWindow, imshow, resizeWindow, waitKey, destroyAllWindows, cvtColor
-import cv2
+from cv2 import FONT_HERSHEY_SIMPLEX, LINE_AA, WINDOW_KEEPRATIO, COLOR_BGR2HSV, putText, namedWindow, imshow, resizeWindow, waitKey, destroyAllWindows, cvtColor
 from numpy import uint8, inf, min, nan, int32, isnan, quantile, ndarray, linalg, bool_, array, argwhere, vstack, argmin, argwhere, mean, sum, full, copy, zeros, array
 from time import time, sleep
 from copy import deepcopy
 import pyny3d.geoms as pyny
-import numpy as np
 
 from HandTrackerRendererV3 import HandTrackerRenderer
 from CustomPipeline2 import CustomPipeline
@@ -20,7 +18,7 @@ Code for running YOLOV8 segmentation models on Jetson Nano 4GB and gesture recog
 Based on https://github.com/geaxgx/depthai_hand_tracker and on the works of Ultralytics https://docs.ultralytics.com/tasks/segment/.
 '''
 
-path_to_yolo = "/home/ema/Desktop/depthai-hand-segmentation/models/best_nano8.pt"
+path_to_yolo = "/home/jetson/Desktop/hand_track_obj_seg8_final/models/best_nano8.pt"
 camera_fps = 15
 num_elements_moving_avarage = 18
 hand_obj_dist_threshold = 60 #[mm]
@@ -44,7 +42,7 @@ SCALING = True
 EXO_COMM = False
 
 def switch_x_y_column(arr):
-    new_arr = np.zeros(arr.shape, dtype=np.uint8)
+    new_arr = zeros(arr.shape, dtype=uint8)
     new_arr[:,0] = arr[:,1]
     new_arr[:,1] = arr[:,0]
     return new_arr
@@ -160,8 +158,8 @@ def calc_distances(masks_pixels, depth_frame, hand_spatial):
 def calc_area(selected_contour_pixels, selected_contour_spatials, grasped_object, rgb_frame, black_pixel_threshold):
     dark_contour_pixel_indices = []
     area = None
-    area_selected_contour_pixels = np.copy(selected_contour_pixels)
-    area_selected_contour_spatials = np.copy(selected_contour_spatials)
+    area_selected_contour_pixels = copy(selected_contour_pixels)
+    area_selected_contour_spatials = copy(selected_contour_spatials)
 
     if grasped_object in ["Hammer", "Crimper"] and selected_contour_pixels is not None:
         # gray_frame = cvtColor(rgb_frame, COLOR_BGR2GRAY)
@@ -176,12 +174,12 @@ def calc_area(selected_contour_pixels, selected_contour_spatials, grasped_object
             selected_contour_spatials = selected_contour_spatials[dark_contour_pixel_indices]
             # selected_contour_spatials = selected_contour_spatials[dark_contour_pixel_indices]'''
          # Convert BGR to HSV
-        hsv_frame = cv2.cvtColor(rgb_frame, cv2.COLOR_BGR2HSV)
+        hsv_frame = cvtColor(rgb_frame, COLOR_BGR2HSV)
 
         
 
         pixels_hsv_values = hsv_frame[selected_contour_pixels[:, 0], selected_contour_pixels[:, 1]]
-        dark_pixels_indeces = np.argwhere(pixels_hsv_values[:,2] < hsv_v_upper_val)
+        dark_pixels_indeces = argwhere(pixels_hsv_values[:,2] < hsv_v_upper_val)
         dark_pixels = selected_contour_pixels[dark_pixels_indeces,:].reshape(-1,2)
         dark_spatials = selected_contour_spatials[dark_pixels_indeces,:].reshape(-1,3)
         pixels_hsv_values = pixels_hsv_values[dark_pixels_indeces,:].reshape(-1,3)
@@ -189,7 +187,7 @@ def calc_area(selected_contour_pixels, selected_contour_spatials, grasped_object
             print("no black values: ", dark_pixels)
             return None, None, None
         
-        dark_pixels_indeces = np.argwhere(pixels_hsv_values[:,2] > hsv_v_lower_val)
+        dark_pixels_indeces = argwhere(pixels_hsv_values[:,2] > hsv_v_lower_val)
         dark_pixels = dark_pixels[dark_pixels_indeces,:].reshape(-1,2)
         dark_spatials = dark_spatials[dark_pixels_indeces,:].reshape(-1,3)
         pixels_hsv_values = pixels_hsv_values[dark_pixels_indeces,:].reshape(-1,3)
@@ -198,24 +196,24 @@ def calc_area(selected_contour_pixels, selected_contour_spatials, grasped_object
             return None, None, None
 
 
-        binary_frame = np.zeros((rgb_frame.shape), dtype=np.bool_)
+        binary_frame = zeros((rgb_frame.shape), dtype=bool_)
         #dark_pixels_yx = switch_x_y_column(dark_pixels) # yx -> xy
         binary_frame[dark_pixels[:,0], dark_pixels[:,1]] = binary_frame[dark_pixels[:,0], dark_pixels[:,1]] + 1
 
         final_indices = []
         for i in range(dark_pixels.shape[0]):
-            val = np.sum(binary_frame[dark_pixels[i,0]-kernel_half_side:dark_pixels[i,0]+kernel_half_side+1,
+            val = sum(binary_frame[dark_pixels[i,0]-kernel_half_side:dark_pixels[i,0]+kernel_half_side+1,
                                       dark_pixels[i,1]-kernel_half_side:dark_pixels[i,1]+kernel_half_side+1])
             # print("val: ", val)
             if val > kernel_elements_num/3:
                 final_indices.append(i)
 
 
-        area_selected_contour_pixels = np.copy(dark_pixels[final_indices,:])
-        area_selected_contour_spatials = np.copy(dark_spatials[final_indices,:])
+        area_selected_contour_pixels = copy(dark_pixels[final_indices,:])
+        area_selected_contour_spatials = copy(dark_spatials[final_indices,:])
 
-        # area_selected_contour_pixels = np.copy(dark_pixels)
-        # area_selected_contour_spatials = np.copy(dark_spatials)
+        # area_selected_contour_pixels = copy(dark_pixels)
+        # area_selected_contour_spatials = copy(dark_spatials)
         
         
         # selected_spatials = selected_spatials[dark_pixel_indices].reshape((-1,3))
@@ -223,18 +221,18 @@ def calc_area(selected_contour_pixels, selected_contour_spatials, grasped_object
         # selected_pixels = selected_pixels[dark_pixel_indices].reshape((-1,2))
         # # print("selected_pixels shape: ", selected_pixels.shape)
 
-        # binary_frame = np.zeros((frame.shape), dtype=np.bool_)
+        # binary_frame = zeros((frame.shape), dtype=bool_)
         # print("selected_pixels\n", selected_pixels)
         # selected_pixels = switch_x_y_column(selected_pixels) # yx -> xy
         # binary_frame[selected_pixels] = binary_frame[selected_pixels] + 1
 
         # for pixel in selected_pixels:
         #     # y, x = pixel
-        #     # gray_frame[y, x] = np.sum(gray_frame[y-kernel_side:y+kernel_side+1, x-kernel_side:x+kernel_side+1] * mean_kernel)
+        #     # gray_frame[y, x] = sum(gray_frame[y-kernel_side:y+kernel_side+1, x-kernel_side:x+kernel_side+1] * mean_kernel)
         #     print("mean_kernel: ", mean_kernel)
-        #     binary_frame[pixel] = np.bool_(np.sum(gray_frame[pixel[0]-kernel_half_side:pixel[0]+kernel_half_side+1,
+        #     binary_frame[pixel] = bool_(sum(gray_frame[pixel[0]-kernel_half_side:pixel[0]+kernel_half_side+1,
         #                                                         pixel[1]-kernel_half_side:pixel[1]+kernel_half_side+1] * mean_kernel))
-        #     # gray_frame[pixel[:,0],pixel[:,1]] = np.sum[gray_frame[pixel[:,0] - (kernel_side/2):pixel[:,0] + (kernel_side/2),
+        #     # gray_frame[pixel[:,0],pixel[:,1]] = sum[gray_frame[pixel[:,0] - (kernel_side/2):pixel[:,0] + (kernel_side/2),
         #     #                                           pixel[:,1] - (kernel_side/2):pixel[:,1] + (kernel_side/2)]]*kernel
 
         # pluto_indices = []

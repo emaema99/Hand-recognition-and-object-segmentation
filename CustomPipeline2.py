@@ -348,7 +348,7 @@ class CustomPipeline:
 		'''
 		Define the script folder path and get .blob files of trained Neural Networks.
 		'''
-		SCRIPT_DIR = "/home/ema/Desktop/depthai-hand-segmentation"
+		SCRIPT_DIR = "/home/jetson/Desktop/hand_track_obj_seg8_final"
 
 		PALM_DETECTION_MODEL = str(SCRIPT_DIR + "/models/palm_detection_sh4.blob")
 		if not Path(PALM_DETECTION_MODEL).exists():

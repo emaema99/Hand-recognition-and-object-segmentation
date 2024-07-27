@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 
 from math import tan, atan
-from numpy import deg2rad, isnan, array, copy, sum, zeros, argwhere, mean
-import numpy as np
+from numpy import deg2rad, isnan, array, copy, sum, zeros, argwhere, mean, reshape
 from depthai import CameraBoardSocket
 
 class HostSpatialsCalc:
@@ -63,7 +62,7 @@ class HostSpatialsCalc:
         # print("in range: ", inRange)
         # print("depthROI: ", depthROI[inRange])
 
-        averageDepth = averaging_method(np.reshape(depthROI[inRange], (-1)))
+        averageDepth = averaging_method(reshape(depthROI[inRange], (-1)))
 
         # Calculate the centroid of the ROI
         centroid = array([int((xmax + xmin) / 2), int((ymax + ymin) / 2)])
