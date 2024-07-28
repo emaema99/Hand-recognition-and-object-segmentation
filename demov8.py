@@ -7,7 +7,7 @@ from time import time, sleep
 from copy import deepcopy
 import pyny3d.geoms as pyny
 from threading import Thread, Lock
-from datetime.datetime import now
+from datetime import datetime
 
 from HandTrackerRendererV3 import HandTrackerRenderer
 from CustomPipeline2 import CustomPipeline
@@ -62,7 +62,7 @@ def camera_saving_loop():
 	while not stop_video_saving_thread:
 		try:
 			save_camera_frame_prev_value = False
-			camera_saving_loop_start_time = time.time()
+			camera_saving_loop_start_time = time()
 			camera_saving_loop_iteration_index = 0
 			video_writer = None
 			while not stop_video_saving_thread:
@@ -70,8 +70,8 @@ def camera_saving_loop():
 					# inizia a salvare i frame
 					print("\n\nInizio a recording il video")
 					save_camera_frame_prev_value = True
-					current_date = now().strftime("%Y%m%d")
-					current_time = now().strftime("%H%M")
+					current_date = datetime.now().strftime("%Y%m%d")
+					current_time = datetime.now().strftime("%H%M")
 					date_time_str = "" + str(current_date) + "_" + str(current_time)
 					complite_path_to_save_the_video = video_folder_path + "logistic_experiment" + date_time_str + ".avi"
 					print("complite_path_to_save_the_video: ", complite_path_to_save_the_video)
@@ -94,10 +94,10 @@ def camera_saving_loop():
 					
 				camera_saving_loop_iteration_index = camera_saving_loop_iteration_index + 1
 					
-				sleep_duration = (camera_saving_loop_start_time + ((1 / saving_fps) * camera_saving_loop_iteration_index)) - time.time()
+				sleep_duration = (camera_saving_loop_start_time + ((1 / saving_fps) * camera_saving_loop_iteration_index)) - time()
 				
 				if sleep_duration > 0:
-					time.sleep(sleep_duration)
+					sleep(sleep_duration)
 		except Exception as e:
 			print("Exception during video saver loop: ", e)	
 
@@ -600,12 +600,24 @@ if __name__ == '__main__':
                         save_camera_frame = True
                     else:
                         save_camera_frame = False
-                    
-                    jetson_info[0] = time.time()
+
+                    jetson_grasping_status = grasping_status_avarage
+                    if type(grasping_status_avarage) == str:
+                        jetson_grasping_status = None
+
+                    jetson_grasped_name = last_grasped_obj_name
+                    if type(last_grasped_obj_name) == str:
+                        jetson_grasped_name = None
+
+                    jetson_area = last_obj_area
+                    if type(last_obj_area) == str:
+                        jetson_area = None
+
+                    jetson_info[0] = time()
                     jetson_info[1] = fps
-                    jetson_info[2] = grasping_status_avarage
-                    jetson_info[3] = last_grasped_obj_name
-                    jetson_info[4] = last_obj_area
+                    jetson_info[2] = jetson_grasping_status
+                    jetson_info[3] = jetson_grasped_name
+                    jetson_info[4] = jetson_area
                     data_manager.set_jetson_info(jetson_info)
 
                     saving_frame_lock.acquire()
