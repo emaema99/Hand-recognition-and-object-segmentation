@@ -44,7 +44,7 @@ kernel_elements_num = kernel_side * kernel_side
 video_folder_path = "/home/jetson/Desktop/hand_track_obj_seg8_final/video/"
 saving_fps = 15
 img_width = 512
-img_height = 400
+img_height = 388
 
 save_camera_frame = False
 saving_frame = zeros((img_height, img_width, 3), dtype=uint8)
