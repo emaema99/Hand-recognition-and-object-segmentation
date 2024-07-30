@@ -355,6 +355,7 @@ if __name__ == '__main__':
     moving_avarage_index = 0
     grasping_status_avarage = False
     last_obj_area = False
+    saving_obj_id = None
 
     # Initialize communication with the exosuit (if enabled)
     data_manager = JetsonDataManager(num_arduino=2, arduino_id_labels=[-20, -40])
@@ -533,6 +534,7 @@ if __name__ == '__main__':
                             last_grasped_obj_name = grasped_obj_name
                             # print("obj_class_id: ", obj_class_id)
                             obj_weight = my_seg8.get_class_weight()[obj_class_id][0]
+                            saving_obj_id = obj_class_id*2
                             if SCALING:
                                 # compute weight
                                 #print("area_arr: ", area_arr)
@@ -548,6 +550,7 @@ if __name__ == '__main__':
                                 else:
                                     obj_weight = my_seg8.get_class_weight()[obj_class_id][1]
                                     last_grasped_obj_name = last_grasped_obj_name + " big"
+                                    saving_obj_id = saving_obj_id + 1
 
                             last_obj_weight = obj_weight
 
@@ -560,6 +563,7 @@ if __name__ == '__main__':
                         data_manager.send_data_to_arduino(0, num_data_to_arduino, num_data_to_arduino_type)
                         if not released:
                             area_arr = zeros(num_elements_moving_avarage)
+                            saving_obj_id = None
                         released = True
                         last_grasped_obj_name = "-"
                         last_obj_weight = "-"
@@ -600,23 +604,23 @@ if __name__ == '__main__':
                         save_camera_frame = True
                     else:
                         save_camera_frame = False
-
+                    
                     jetson_grasping_status = grasping_status_avarage
                     if type(grasping_status_avarage) == str:
                         jetson_grasping_status = None
-
-                    jetson_grasped_name = last_grasped_obj_name
-                    if type(last_grasped_obj_name) == str:
-                        jetson_grasped_name = None
-
+                    
+                    jetson_grasped_object = saving_obj_id
+                    if type(saving_obj_id) == str:
+                        jetson_grasped_object = None
+                    
                     jetson_area = last_obj_area
                     if type(last_obj_area) == str:
                         jetson_area = None
-
+                    
                     jetson_info[0] = time()
                     jetson_info[1] = fps
                     jetson_info[2] = jetson_grasping_status
-                    jetson_info[3] = jetson_grasped_name
+                    jetson_info[3] = jetson_grasped_object
                     jetson_info[4] = jetson_area
                     data_manager.set_jetson_info(jetson_info)
 
