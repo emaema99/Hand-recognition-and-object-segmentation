@@ -219,25 +219,15 @@ def calc_area(selected_contour_pixels, selected_contour_spatials, grasped_object
     if grasped_object in ["Hammer", "Crimper"] and selected_contour_pixels is not None:
         # gray_frame = cvtColor(rgb_frame, COLOR_BGR2GRAY)
         selected_contour_pixels = array(selected_contour_pixels)
-        '''# Extract the RGB values at the specified coordinates, assuming selected_contour_pixels is in (y, x) format to match OpenCV conventions
-        pixel_values = rgb_frame[selected_contour_pixels[:, 0], selected_contour_pixels[:, 1]]
-        # Find indices where pixel intensity is below the black_pixel_threshold (for any RGB channel)
-        dark_contour_pixel_indices = argwhere((pixel_values < black_pixel_threshold).all(axis=-1)).flatten()
-        
-        if selected_contour_spatials is not None:
-            selected_contour_spatials = array(selected_contour_spatials)
-            selected_contour_spatials = selected_contour_spatials[dark_contour_pixel_indices]
-            # selected_contour_spatials = selected_contour_spatials[dark_contour_pixel_indices]'''
-         # Convert BGR to HSV
+        # Convert BGR to HSV
         hsv_frame = cvtColor(rgb_frame, COLOR_BGR2HSV)
-
-        
 
         pixels_hsv_values = hsv_frame[selected_contour_pixels[:, 0], selected_contour_pixels[:, 1]]
         dark_pixels_indeces = argwhere(pixels_hsv_values[:,2] < hsv_v_upper_val)
         dark_pixels = selected_contour_pixels[dark_pixels_indeces,:].reshape(-1,2)
         dark_spatials = selected_contour_spatials[dark_pixels_indeces,:].reshape(-1,3)
         pixels_hsv_values = pixels_hsv_values[dark_pixels_indeces,:].reshape(-1,3)
+
         if dark_pixels.shape[0] < 1:
             print("no black values: ", dark_pixels)
             return None, None, None
@@ -246,10 +236,10 @@ def calc_area(selected_contour_pixels, selected_contour_spatials, grasped_object
         dark_pixels = dark_pixels[dark_pixels_indeces,:].reshape(-1,2)
         dark_spatials = dark_spatials[dark_pixels_indeces,:].reshape(-1,3)
         pixels_hsv_values = pixels_hsv_values[dark_pixels_indeces,:].reshape(-1,3)
+
         if dark_pixels.shape[0] < 1:
             print("no black values: ", dark_pixels)
             return None, None, None
-
 
         binary_frame = zeros((rgb_frame.shape), dtype=bool_)
         binary_frame[dark_pixels[:,0], dark_pixels[:,1]] = binary_frame[dark_pixels[:,0], dark_pixels[:,1]] + 1
@@ -262,41 +252,8 @@ def calc_area(selected_contour_pixels, selected_contour_spatials, grasped_object
             if val > kernel_elements_num/3:
                 final_indices.append(i)
 
-
         area_selected_contour_pixels = copy(dark_pixels[final_indices,:])
         area_selected_contour_spatials = copy(dark_spatials[final_indices,:])
-
-        # area_selected_contour_pixels = copy(dark_pixels)
-        # area_selected_contour_spatials = copy(dark_spatials)
-        
-        
-        # selected_spatials = selected_spatials[dark_pixel_indices].reshape((-1,3))
-        # # print("selected_spatials shape: ", selected_spatials.shape)
-        # selected_pixels = selected_pixels[dark_pixel_indices].reshape((-1,2))
-        # # print("selected_pixels shape: ", selected_pixels.shape)
-
-        # binary_frame = zeros((frame.shape), dtype=bool_)
-        # print("selected_pixels\n", selected_pixels)
-        # binary_frame[selected_pixels] = binary_frame[selected_pixels] + 1
-
-        # for pixel in selected_pixels:
-        #     # y, x = pixel
-        #     # gray_frame[y, x] = sum(gray_frame[y-kernel_side:y+kernel_side+1, x-kernel_side:x+kernel_side+1] * mean_kernel)
-        #     print("mean_kernel: ", mean_kernel)
-        #     binary_frame[pixel] = bool_(sum(gray_frame[pixel[0]-kernel_half_side:pixel[0]+kernel_half_side+1,
-        #                                                         pixel[1]-kernel_half_side:pixel[1]+kernel_half_side+1] * mean_kernel))
-        #     # gray_frame[pixel[:,0],pixel[:,1]] = sum[gray_frame[pixel[:,0] - (kernel_side/2):pixel[:,0] + (kernel_side/2),
-        #     #                                           pixel[:,1] - (kernel_side/2):pixel[:,1] + (kernel_side/2)]]*kernel
-
-        # pluto_indices = []
-        # for i in range(selected_pixels.shape[0]):
-        #     if binary_frame[selected_pixels[i]] == 1:
-        #         pluto_indices.append(i)
-
-        # selected_spatials = selected_spatials[pluto_indices]
-        # selected_pixels = selected_pixels[pluto_indices]
-
-    
 
     if area_selected_contour_spatials is not None and len(area_selected_contour_spatials) > 0:
         try:
@@ -308,12 +265,6 @@ def calc_area(selected_contour_pixels, selected_contour_spatials, grasped_object
 
             #Set all z-values to obj_z
             selected_contour_spatials[:, 2] = obj_z
-
-            # Flatten the list of arrays to ensure homogeneity
-            # selected_contour_spatials_flat = [item for sublist in selected_contour_spatials for item in sublist]
-            # Convert to numpy array, ensuring the correct shape
-            # selected_contour_spatials_np = array(selected_contour_spatials_flat).reshape(-1, 3)
-            # polygon = pyny.Polygon(selected_contour_spatials_np)
             polygon = pyny.Polygon(area_selected_contour_spatials)
             area = (polygon.get_area())/100
             #print(f'Area is: {int(area)} cm^2')
